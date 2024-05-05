@@ -1,10 +1,12 @@
 import builtins
+import inspect
 import io
 from typing import Optional
 
 import hy  # to set builtin macros
 from hy.reader.hy_reader import HyReader
 from hy.reader.mangling import unmangle
+from hyluxe.server.completion import get_completion
 from lsprotocol import types
 from pygls.server import LanguageServer
 
@@ -32,15 +34,7 @@ def completions(
     params: Optional[types.CompletionParams] = None,
 ) -> types.CompletionList:
     """Returns completion items."""
-    return types.CompletionList(
-        is_incomplete=False,
-        items=[
-            types.CompletionItem(
-                label=unmangle(func_name), kind=types.CompletionItemKind.Keyword
-            )
-            for func_name, func in builtins._hy_macros.items()
-        ],
-    )
+    return get_completion()
 
 
 @hy_server.feature(types.TEXT_DOCUMENT_HOVER)
