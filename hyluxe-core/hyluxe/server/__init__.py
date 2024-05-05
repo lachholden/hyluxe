@@ -31,10 +31,13 @@ def did_open(server: HyLanguageServer, params: types.DidOpenTextDocumentParams):
     types.CompletionOptions(trigger_characters=["(", " "]),
 )
 def completions(
+    server: HyLanguageServer,
     params: Optional[types.CompletionParams] = None,
 ) -> types.CompletionList:
     """Returns completion items."""
-    return get_completion()
+    return get_completion(
+        server.workspace.get_document(params.text_document.uri), params.position
+    )
 
 
 @hy_server.feature(types.TEXT_DOCUMENT_HOVER)
