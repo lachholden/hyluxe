@@ -1,7 +1,10 @@
+import builtins
 import io
 from typing import Optional
 
+import hy  # to set builtin macros
 from hy.reader.hy_reader import HyReader
+from hy.reader.mangling import unmangle
 from lsprotocol import types
 from pygls.server import LanguageServer
 
@@ -32,10 +35,10 @@ def completions(
     return types.CompletionList(
         is_incomplete=False,
         items=[
-            types.CompletionItem(label="defn", kind=types.CompletionItemKind.Keyword),
             types.CompletionItem(
-                label="defclass", kind=types.CompletionItemKind.Keyword
-            ),
+                label=unmangle(func_name), kind=types.CompletionItemKind.Keyword
+            )
+            for func_name, func in builtins._hy_macros.items()
         ],
     )
 
