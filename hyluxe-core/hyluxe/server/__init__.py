@@ -1,3 +1,7 @@
+import io
+from typing import Optional
+
+from hy.reader.hy_reader import HyReader
 from lsprotocol import types
 from pygls.server import LanguageServer
 
@@ -7,6 +11,33 @@ class HyLanguageServer(LanguageServer):
 
 
 hy_server = HyLanguageServer("hyluxe-hy", "v0.1")
+
+
+@hy_server.feature(types.TEXT_DOCUMENT_DID_OPEN)
+def did_open(server: HyLanguageServer, params: types.DidOpenTextDocumentParams):
+    doc = server.workspace.get_document(params.text_document.uri)
+    reader = HyReader(use_current_readers=False)
+    forms = reader.parse(io.StringIO(doc.source))
+    server.show_message_log(str(next(forms)))
+
+
+@hy_server.feature(
+    types.TEXT_DOCUMENT_COMPLETION,
+    types.CompletionOptions(trigger_characters=["(", " "]),
+)
+def completions(
+    params: Optional[types.CompletionParams] = None,
+) -> types.CompletionList:
+    """Returns completion items."""
+    return types.CompletionList(
+        is_incomplete=False,
+        items=[
+            types.CompletionItem(label="defn", kind=types.CompletionItemKind.Keyword),
+            types.CompletionItem(
+                label="defclass", kind=types.CompletionItemKind.Keyword
+            ),
+        ],
+    )
 
 
 @hy_server.feature(types.TEXT_DOCUMENT_HOVER)
