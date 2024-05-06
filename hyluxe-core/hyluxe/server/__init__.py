@@ -59,7 +59,8 @@ def scoped_identifier_to_completion(ident: ScopedIdentifier) -> types.Completion
         kind=ident.kind,
         documentation=ident.documentation,
         label_details=types.CompletionItemLabelDetails(
-            detail=_unmangle_signature(ident.signature), description=ident.module_path
+            detail=_unmangle_signature(ident.signature) if ident.signature else None,
+            description=ident.module_path,
         ),
     )
 

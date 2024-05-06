@@ -10,18 +10,21 @@ from typing import Any, Iterable, Optional
 import hy  # for side-effects
 import hy.models
 import toolz.functoolz
+from funcparserlib.parser import NoParseError, many, maybe
+from hy.core.result_macros import importlike, module_name_pattern
+from hy.model_patterns import pexpr, sym
 from hy.reader.mangling import unmangle
 from lsprotocol import types as lsp
 
 
 @dataclass
 class ScopedIdentifier:
-    py_obj: Optional[Any]
     name: str
     kind: lsp.CompletionItemKind
-    documentation: Optional[str]
-    signature: Optional[inspect.Signature]
-    module_path: Optional[str]
+    documentation: Optional[str] = None
+    signature: Optional[inspect.Signature] = None
+    module_path: Optional[str] = None
+    py_obj: Optional[Any] = None
 
 
 @dataclass
@@ -126,3 +129,49 @@ def tag_core_macros(model: TaggedModel) -> TaggedModel:
     if model.hy_model == TaggedModel.ROOT_MODEL:
         model.scoped_identifiers.extend(_core_macro_completions())
     return model
+
+
+# IMPORTS
+_import_parser = sym("import") + many(module_name_pattern + maybe(importlike))
+
+
+@TaggedModel.tagger_function
+def tag_imports(model: TaggedModel) -> TaggedModel:
+    """If model is an import expression, add the imported modules/identifiers in the
+    scoped variables of the parent model.
+    """
+    if not isinstance(model.hy_model, hy.models.Expression):
+        return model
+
+    try:
+        entries = _import_parser.parse(model.hy_model)
+        for mod, as_or_froms in entries:
+            if as_or_froms is None:
+                # "import xyz"
+                model.parent.scoped_identifiers.append(
+                    ScopedIdentifier(
+                        name=mod[:],
+                        kind=lsp.CompletionItemKind.Module,
+                    )
+                )
+            elif as_or_froms[0] == hy.models.Keyword("as"):
+                # "import xyz as abc"
+                # TODO as
+                pass
+            else:
+                # "from abc import def, ghi as jk"
+                for as_or_from in as_or_froms:
+                    for ident, ident_as in as_or_from:
+                        if ident_as is None:
+                            model.parent.scoped_identifiers.append(
+                                ScopedIdentifier(
+                                    name=ident[:],
+                                    kind=lsp.CompletionItemKind.Variable,
+                                )
+                            )
+                        else:
+                            # TODO as
+                            pass
+        return model
+    except NoParseError:
+        return model
