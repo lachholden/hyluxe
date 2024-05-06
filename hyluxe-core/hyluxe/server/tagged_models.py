@@ -57,6 +57,7 @@ class TaggedModel:
 
     # tagged data fields
     scoped_identifiers: list[ScopedIdentifier] = field(default_factory=list)
+    identifier: Optional[ScopedIdentifier] = None
 
     @classmethod
     def create_root_model(cls, hy_forms: Iterable[hy.models.Object]):
@@ -67,28 +68,35 @@ class TaggedModel:
             hy_model=cls.ROOT_MODEL,
             parent=cls.ROOT_MODEL,
         )
-        root_model = toolz.functoolz.compose(*cls.tagger_functions)(root_model)
-        root_model.children = [cls.tag_hy_model(m, root_model) for m in hy_forms]
+        root_model.children = [
+            cls.create_recursive_model(hy_model=m, parent=root_model) for m in hy_forms
+        ]
         return root_model
 
     @classmethod
-    def tag_hy_model(
+    def create_recursive_model(
         cls, hy_model: hy.models.Object, parent: TaggedModel
     ) -> TaggedModel:
         """Create and tag a new TaggedModel from a hy model and a parent TaggedModel."""
         tagged_model = cls(hy_model=hy_model, parent=parent)
-        tagged_model = toolz.functoolz.compose(*cls.tagger_functions)(tagged_model)
         if isinstance(tagged_model.hy_model, hy.models.Sequence):
             tagged_model.children = [
-                cls.tag_hy_model(m, tagged_model) for m in tagged_model.hy_model
+                cls.create_recursive_model(m, tagged_model)
+                for m in tagged_model.hy_model
             ]
 
         return tagged_model
 
+    def tag_model(self):
+        for function in self.__class__.tagger_functions():
+            function(self)
+        for child in self.children:
+            child.tag_model()
+
     def get_models_enclosing_position(self, line: int, col: int) -> list[TaggedModel]:
         """Recursively get the list of TaggedModels enclosing a given position.
 
-        Models in the returned list are ordered from the top of the tree down.
+        Models in the returned list are ordered from the bottom of the tree up
         """
         if self.hy_model == TaggedModel.ROOT_MODEL or (
             self.hy_model.start_line <= line <= self.hy_model.end_line
@@ -97,7 +105,7 @@ class TaggedModel:
             inner_lists = [
                 c.get_models_enclosing_position(line, col) for c in self.children
             ]
-            return list(itertools.chain.from_iterable([[self]] + inner_lists))
+            return list(itertools.chain.from_iterable(inner_lists + [[self]]))
         else:
             return []
 
@@ -125,10 +133,9 @@ def _core_macro_completions() -> list[ScopedIdentifier]:
 
 
 @TaggedModel.tagger_function
-def tag_core_macros(model: TaggedModel) -> TaggedModel:
+def tag_core_macros(model: TaggedModel):
     if model.hy_model == TaggedModel.ROOT_MODEL:
         model.scoped_identifiers.extend(_core_macro_completions())
-    return model
 
 
 # IMPORTS
@@ -136,12 +143,12 @@ _import_parser = sym("import") + many(module_name_pattern + maybe(importlike))
 
 
 @TaggedModel.tagger_function
-def tag_imports(model: TaggedModel) -> TaggedModel:
+def tag_imports(model: TaggedModel):
     """If model is an import expression, add the imported modules/identifiers in the
     scoped variables of the parent model.
     """
     if not isinstance(model.hy_model, hy.models.Expression):
-        return model
+        return
 
     try:
         entries = _import_parser.parse(model.hy_model)
@@ -172,6 +179,27 @@ def tag_imports(model: TaggedModel) -> TaggedModel:
                         else:
                             # TODO as
                             pass
-        return model
+        return
     except NoParseError:
-        return model
+        return
+
+
+@TaggedModel.tagger_function
+def tag_symbols_with_scoped_identifiers(model: TaggedModel):
+    # This runs after all of the scoped identifiers have been found and set by e.g.
+    # parsing imports and setvs -- so now we can associate plain symbols in these
+    # established scopes with their tagged tagged identifiers.
+
+    if not isinstance(model.hy_model, hy.models.Symbol):
+        return
+
+    symbol_text = model.hy_model[:]
+    parent = model.parent
+    while parent.parent != TaggedModel.ROOT_MODEL:
+        for scoped_ident in parent.scoped_identifiers:
+            if scoped_ident.name == symbol_text:
+                model.identifier = scoped_ident
+                return
+        parent = parent.parent
+
+    return

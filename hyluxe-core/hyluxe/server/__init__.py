@@ -79,7 +79,7 @@ def completions(
     forms = reader.parse(io.StringIO(doc.source))
     tagged_model = TaggedModel.create_root_model(forms)
     enclosing_models = tagged_model.get_models_enclosing_position(
-        params.position.line, params.position.character
+        params.position.line - 1, params.position.character - 1
     )
     return types.CompletionList(
         is_incomplete=False,
@@ -89,6 +89,26 @@ def completions(
                 [model.scoped_identifiers for model in enclosing_models]
             )
         ],
+    )
+
+
+@hy_server.feature(types.TEXT_DOCUMENT_HOVER)
+def hover(
+    server: HyLanguageServer, params: Optional[types.HoverParams] = None
+) -> types.Hover:
+    doc = server.workspace.get_document(params.text_document.uri)
+    reader = HyReader(use_current_readers=False)
+    forms = reader.parse(io.StringIO(doc.source))
+    tagged_model = TaggedModel.create_root_model(forms)
+    enclosing_model = tagged_model.get_models_enclosing_position(
+        params.position.line - 1, params.position.character - 1
+    )[0]
+    server.show_message_log(str(enclosing_model))
+    return types.Hover(
+        contents=types.MarkupContent(
+            kind=types.MarkupKind.Markdown,
+            value=str(enclosing_model.identifier) or "HOVER",
+        )
     )
 
 
