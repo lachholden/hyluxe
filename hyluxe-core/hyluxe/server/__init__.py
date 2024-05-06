@@ -7,7 +7,7 @@ from typing import Optional
 import hy  # to set builtin macros
 from hy.reader.hy_reader import HyReader
 from hy.reader.mangling import unmangle
-from hyluxe.server.tagged_models import ScopedIdentifier, TaggedModel
+from hyluxe.server.tagged_form_tree import ScopedIdentifier, TaggedFormTree
 from lsprotocol import types
 from pygls.server import LanguageServer
 
@@ -22,9 +22,7 @@ hy_server = HyLanguageServer("hyluxe-hy", "v0.1")
 @hy_server.feature(types.TEXT_DOCUMENT_DID_OPEN)
 def did_open(server: HyLanguageServer, params: types.DidOpenTextDocumentParams):
     doc = server.workspace.get_document(params.text_document.uri)
-    reader = HyReader(use_current_readers=False)
-    forms = reader.parse(io.StringIO(doc.source))
-    tagged_model = TaggedModel.create_root_model(forms)
+    tagged_model = TaggedFormTree.parse_hy(doc.source)
     server.show_message_log(str(tagged_model))
 
 
@@ -75,11 +73,9 @@ def completions(
 ) -> types.CompletionList:
     """Returns completion items."""
     doc = server.workspace.get_document(params.text_document.uri)
-    reader = HyReader(use_current_readers=False)
-    forms = reader.parse(io.StringIO(doc.source))
-    tagged_model = TaggedModel.create_root_model(forms)
+    tagged_model = TaggedFormTree.parse_hy(doc.source)
     enclosing_models = tagged_model.get_models_enclosing_position(
-        params.position.line - 1, params.position.character - 1
+        params.position.line+1, params.position.character+1
     )
     return types.CompletionList(
         is_incomplete=False,
@@ -92,24 +88,24 @@ def completions(
     )
 
 
-@hy_server.feature(types.TEXT_DOCUMENT_HOVER)
-def hover(
-    server: HyLanguageServer, params: Optional[types.HoverParams] = None
-) -> types.Hover:
-    doc = server.workspace.get_document(params.text_document.uri)
-    reader = HyReader(use_current_readers=False)
-    forms = reader.parse(io.StringIO(doc.source))
-    tagged_model = TaggedModel.create_root_model(forms)
-    enclosing_model = tagged_model.get_models_enclosing_position(
-        params.position.line - 1, params.position.character - 1
-    )[0]
-    server.show_message_log(str(enclosing_model))
-    return types.Hover(
-        contents=types.MarkupContent(
-            kind=types.MarkupKind.Markdown,
-            value=str(enclosing_model.identifier) or "HOVER",
-        )
-    )
+# @hy_server.feature(types.TEXT_DOCUMENT_HOVER)
+# def hover(
+#     server: HyLanguageServer, params: Optional[types.HoverParams] = None
+# ) -> types.Hover:
+#     doc = server.workspace.get_document(params.text_document.uri)
+#     reader = HyReader(use_current_readers=False)
+#     forms = reader.parse(io.StringIO(doc.source))
+#     tagged_model = TaggedModel.create_root_model(forms)
+#     enclosing_model = tagged_model.get_models_enclosing_position(
+#         params.position.line, params.position.character
+#     )[0]
+#     server.show_message_log(str(enclosing_model))
+#     return types.Hover(
+#         contents=types.MarkupContent(
+#             kind=types.MarkupKind.Markdown,
+#             value=str(enclosing_model.identifier) or "HOVER",
+#         )
+#     )
 
 
 def main():
