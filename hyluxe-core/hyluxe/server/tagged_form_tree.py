@@ -4,10 +4,9 @@ import builtins
 import inspect
 import io
 import itertools
-import types
 from dataclasses import dataclass, field
-from math import inf
-from typing import Any, Iterable, Optional
+from enum import Enum, auto
+from typing import Any, Generator, Iterable, Optional
 
 import hy  # for side-effects
 import hy.models
@@ -17,13 +16,20 @@ from hy.core.result_macros import importlike, module_name_pattern
 from hy.model_patterns import pexpr, sym
 from hy.reader.hy_reader import HyReader
 from hy.reader.mangling import unmangle
-from lsprotocol import types as lsp
+
+
+class ScopedIdentifierKind(Enum):
+    Module = auto()
+    Variable = auto()
+    HyMacro = auto()
+    HyReader = auto()
+    HyMacroCore = auto()
 
 
 @dataclass
 class ScopedIdentifier:
     name: str
-    kind: lsp.CompletionItemKind
+    kind: ScopedIdentifierKind
     documentation: Optional[str] = None
     signature: Optional[inspect.Signature] = None
     module_path: Optional[str] = None
@@ -31,13 +37,11 @@ class ScopedIdentifier:
 
 
 # CORE MACROS
-
-
 def _core_macro_completions() -> list[ScopedIdentifier]:
     return [
         ScopedIdentifier(
             name=unmangle(func_name),
-            kind=lsp.CompletionItemKind.Keyword,
+            kind=ScopedIdentifierKind.HyMacroCore,
             documentation=inspect.getdoc(func),
             signature=inspect.signature(func),
             module_path=inspect.getmodule(func).__name__,
@@ -48,7 +52,6 @@ def _core_macro_completions() -> list[ScopedIdentifier]:
 
 
 # PARSING IMPORTS
-
 _import_parser = sym("import") + many(module_name_pattern + maybe(importlike))
 
 
@@ -73,7 +76,7 @@ def _match_import_expr(model: hy.models.Object) -> list[ScopedIdentifier]:
             new_scoped_identifiers.append(
                 ScopedIdentifier(
                     name=mod[:],
-                    kind=lsp.CompletionItemKind.Module,
+                    kind=ScopedIdentifierKind.Module,
                 )
             )
         elif as_or_froms[0] == hy.models.Keyword("as"):
@@ -88,7 +91,7 @@ def _match_import_expr(model: hy.models.Object) -> list[ScopedIdentifier]:
                         new_scoped_identifiers.append(
                             ScopedIdentifier(
                                 name=ident[:],
-                                kind=lsp.CompletionItemKind.Variable,
+                                kind=ScopedIdentifierKind.Variable,  # TODO
                             )
                         )
                     else:
@@ -122,9 +125,23 @@ class TaggedFormTree:
         Models in the returned list are ordered from the bottom of the tree up
         """
         if (
+            # multi-line model and we're on a line in the middle
             (self.start_line < line < self.end_line)
-            or (self.start_line == line and self.start_col <= col)
-            or (self.end_line == line and self.end_col >= col)
+            # multi-line model and we're on the start line after the start col
+            or (
+                self.start_line == line
+                and self.end_line > line
+                and self.start_col <= col
+            )
+            # multi-line model and we're on the end line before the end col
+            or (
+                self.end_line == line and self.start_line < line and self.end_col >= col
+            )
+            # single-line model and we're between the start and end cols
+            or (
+                self.start_line == self.end_line == line
+                and self.start_col <= col <= self.end_col
+            )
         ):
             inner_lists = [
                 c.get_models_enclosing_position(line, col) for c in self.children
@@ -149,28 +166,61 @@ class TaggedFormTree:
         return cls.construct_from_hy_model(root, is_root=True)
 
     @classmethod
-    def construct_from_hy_model(cls, hy_model: hy.models.Object, is_root=False):
-        children = []
-        scoped_identifiers = []
+    def construct_from_hy_model(
+        cls,
+        hy_model: hy.models.Object,
+        is_root=False,
+        in_scope_identifiers: dict[str, ScopedIdentifier] = {},
+    ):
+        this_level_scoped_identifiers = []
 
         # If this is the root model, then all of the core macros come in scope here.
         if is_root:
-            scoped_identifiers.extend(_core_macro_completions())
+            this_level_scoped_identifiers.extend(_core_macro_completions())
 
         # If this model is a sequence, check the children for any expressions that
         # introduce identifiers at *this* scope one level higher (e.g. import, setv,
         # etc.), while also recursively constructing the tree.
         if isinstance(hy_model, hy.models.Sequence):
             for child_model in hy_model:
-                scoped_identifiers.extend(_match_import_expr(child_model))
-                children.append(cls.construct_from_hy_model(child_model))
+                this_level_scoped_identifiers.extend(_match_import_expr(child_model))
+
+        # If this model is a symbol, search for its string value in the identifiers
+        # currently in scope
+        this_identifier = None
+        if isinstance(hy_model, hy.models.Symbol):
+            symbol_name = hy_model[:]
+            if scoped_identifier := in_scope_identifiers.get(symbol_name):
+                this_identifier = scoped_identifier
+
+        # Now iterate through the child models to recursively create tagged forms.
+        child_tagged_forms = []
+        if isinstance(hy_model, hy.models.Sequence):
+            for child_model in hy_model:
+                child_tagged_forms.append(
+                    cls.construct_from_hy_model(
+                        child_model,
+                        in_scope_identifiers=(
+                            in_scope_identifiers
+                            | {i.name: i for i in this_level_scoped_identifiers}
+                        ),
+                    )
+                )
 
         return TaggedFormTree(
-            children=children,
+            children=child_tagged_forms,
             start_line=hy_model.start_line,
             start_col=hy_model.start_column,
             end_line=hy_model.end_line,
             end_col=hy_model.end_column,
-            scoped_identifiers=scoped_identifiers,
-            this_identifier=None,
+            scoped_identifiers=this_level_scoped_identifiers,
+            this_identifier=this_identifier,
         )
+
+    def forms_with_identifiers(self) -> Generator[TaggedFormTree, None, None]:
+        if self.this_identifier:
+            yield self
+
+        for child in self.children:
+            for form in child.forms_with_identifiers():
+                yield form

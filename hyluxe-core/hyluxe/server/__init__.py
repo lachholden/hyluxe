@@ -1,12 +1,9 @@
-import builtins
-import inspect
-import io
 import itertools
 from typing import Optional
 
 import hy  # to set builtin macros
-from hy.reader.hy_reader import HyReader
-from hy.reader.mangling import unmangle
+from hyluxe.server.lsp_conversions import (scoped_identifier_to_completion,
+                                           tagged_form_to_range)
 from hyluxe.server.tagged_form_tree import ScopedIdentifier, TaggedFormTree
 from lsprotocol import types
 from pygls.server import LanguageServer
@@ -26,43 +23,6 @@ def did_open(server: HyLanguageServer, params: types.DidOpenTextDocumentParams):
     server.show_message_log(str(tagged_model))
 
 
-def _unmangle_signature(sig: inspect.Signature) -> str:
-    # TODO destructuring?
-    sig_str = ""
-    for parameter in sig.parameters.values():
-        if parameter.name == "_hy_compiler":
-            continue
-
-        if parameter.kind == inspect.Parameter.VAR_KEYWORD:
-            sig_str += " #**"
-        if parameter.kind == inspect.Parameter.VAR_POSITIONAL:
-            sig_str += " #*"
-
-        if parameter.annotation != inspect.Parameter.empty:
-            annotated_name = f"#^ {unmangle(parameter.name)} {unmangle(parameter.annotation.__name__)}"
-        else:
-            annotated_name = unmangle(parameter.name)
-
-        if parameter.default != inspect.Parameter.empty:
-            sig_str += f" [{annotated_name} {parameter.default}]"
-        else:
-            sig_str += f" {annotated_name}"
-
-    return sig_str
-
-
-def scoped_identifier_to_completion(ident: ScopedIdentifier) -> types.CompletionItem:
-    return types.CompletionItem(
-        label=ident.name,
-        kind=ident.kind,
-        documentation=ident.documentation,
-        label_details=types.CompletionItemLabelDetails(
-            detail=_unmangle_signature(ident.signature) if ident.signature else None,
-            description=ident.module_path,
-        ),
-    )
-
-
 @hy_server.feature(
     types.TEXT_DOCUMENT_COMPLETION,
     types.CompletionOptions(trigger_characters=["(", " "]),
@@ -75,7 +35,7 @@ def completions(
     doc = server.workspace.get_document(params.text_document.uri)
     tagged_model = TaggedFormTree.parse_hy(doc.source)
     enclosing_models = tagged_model.get_models_enclosing_position(
-        params.position.line+1, params.position.character+1
+        params.position.line + 1, params.position.character + 1
     )
     return types.CompletionList(
         is_incomplete=False,
@@ -88,24 +48,40 @@ def completions(
     )
 
 
-# @hy_server.feature(types.TEXT_DOCUMENT_HOVER)
-# def hover(
-#     server: HyLanguageServer, params: Optional[types.HoverParams] = None
-# ) -> types.Hover:
+@hy_server.feature(types.TEXT_DOCUMENT_HOVER)
+def hover(
+    server: HyLanguageServer, params: Optional[types.HoverParams] = None
+) -> types.Hover:
+    doc = server.workspace.get_document(params.text_document.uri)
+    tagged_model = TaggedFormTree.parse_hy(doc.source)
+    enclosing_model = tagged_model.get_models_enclosing_position(
+        params.position.line + 1, params.position.character + 1
+    )[0]
+    server.show_message_log(
+        f"line: {params.position.line}  col: {params.position.character}"
+    )
+    server.show_message_log(str(enclosing_model))
+    return types.Hover(
+        contents=types.MarkupContent(
+            kind=types.MarkupKind.Markdown,
+            value=str(enclosing_model.this_identifier) or "HOVER",
+        ),
+        range=tagged_form_to_range(enclosing_model),
+    )
+
+
+# @hy_server.feature(
+#     types.TEXT_DOCUMENT_SEMANTIC_TOKENS_FULL,
+#     types.SemanticTokensLegend(token_types=["operator"], token_modifiers=[]),
+# )
+# def semantic_tokens(
+#     server: HyLanguageServer, params: types.SemanticTokensParams
+# ) -> types.SemanticTokens:
 #     doc = server.workspace.get_document(params.text_document.uri)
-#     reader = HyReader(use_current_readers=False)
-#     forms = reader.parse(io.StringIO(doc.source))
-#     tagged_model = TaggedModel.create_root_model(forms)
-#     enclosing_model = tagged_model.get_models_enclosing_position(
-#         params.position.line, params.position.character
-#     )[0]
-#     server.show_message_log(str(enclosing_model))
-#     return types.Hover(
-#         contents=types.MarkupContent(
-#             kind=types.MarkupKind.Markdown,
-#             value=str(enclosing_model.identifier) or "HOVER",
-#         )
-#     )
+#     tagged_model = TaggedFormTree.parse_hy(doc.source)
+#     for form in tagged_model.forms_with_identifiers():
+#         pass
+#         types.SemanticTokensLegend
 
 
 def main():
