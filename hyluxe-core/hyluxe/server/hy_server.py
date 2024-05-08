@@ -37,7 +37,8 @@ def did_open(server: HyLanguageServer, params: types.DidOpenTextDocumentParams):
     try:
         tagged_model = TaggedFormTree.parse_hy(doc.source)
         server.tagged_trees[doc.uri] = tagged_model
-    except hy.reader.exceptions.LexException:
+    except hy.reader.exceptions.LexException as e:
+        server.show_message_log(str(e))
         del server.tagged_trees[doc.uri]
 
 
@@ -48,7 +49,7 @@ def did_change(server: HyLanguageServer, params: types.DidChangeTextDocumentPara
     try:
         tagged_model = TaggedFormTree.parse_hy(doc.source)
         server.tagged_trees[doc.uri] = tagged_model
-    except hy.reader.exceptions.LexException:
+    except hy.reader.exceptions.LexException as e:
         # We failed to parse. *If* this is because we just added a single . and this
         # made everything unworkable, then the previous analysis should hold well
         # enough & this way we still get good autocomplete for the next dotted segment
@@ -56,6 +57,7 @@ def did_change(server: HyLanguageServer, params: types.DidChangeTextDocumentPara
             not len(params.content_changes) == 1
             or not params.content_changes[0].text == "."
         ):
+            server.show_message_log(str(e))
             del server.tagged_trees[doc.uri]
 
 

@@ -274,8 +274,11 @@ class _NoOpReaderMacroTable:
         return True
 
     # hy_reader.py:391
-    def __getitem__(self, _):
-        return lambda _, __: None
+    def __getitem__(self, key):
+        if reader := HyReader.DEFAULT_TABLE.get(key):
+            return reader
+        else:
+            return lambda __, _ : None
 
 
 @dataclass(frozen=True)
