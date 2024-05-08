@@ -55,12 +55,18 @@ def completions(
 @hy_server.feature(types.TEXT_DOCUMENT_HOVER)
 def hover(
     server: HyLanguageServer, params: Optional[types.HoverParams] = None
-) -> types.Hover:
+) -> Optional[types.Hover]:
     doc = server.workspace.get_document(params.text_document.uri)
     tagged_model = TaggedFormTree.parse_hy(doc.source)
-    enclosing_model = tagged_model.get_models_enclosing_position(
+    enclosing_models = tagged_model.get_models_enclosing_position(
         params.position.line + 1, params.position.character + 1
-    )[0]
+    )
+    for m in enclosing_models:
+        if m.this_identifier:
+            enclosing_model = m
+            break
+    else:
+        return
     server.show_message_log(
         f"line: {params.position.line}  col: {params.position.character}"
     )
