@@ -144,10 +144,10 @@ def _attr_identifier_try_lookup(object: Any, lookup_name: str) -> ScopedIdentifi
             kind = ScopedIdentifierKind.Module
         elif inspect.isclass(attr):
             kind = ScopedIdentifierKind.Class
-        elif inspect.ismethod(attr):
+        elif inspect.ismethod(attr) or inspect.ismethoddescriptor(attr):
             kind = ScopedIdentifierKind.Method
             signature = inspect.signature(attr)
-        elif inspect.isfunction(attr):
+        elif inspect.isfunction(attr) or inspect.isroutine(attr):
             kind = ScopedIdentifierKind.Function
             signature = inspect.signature(attr)
 
@@ -166,9 +166,7 @@ def _identifiers_from_from_import(
     mod_expr: hy.models.Object, ident_expr: hy.models.Object
 ) -> list[ScopedIdentifier]:
     module_obj = _module_identifier_try_import(mod_expr).py_obj
-    return [
-        _attr_identifier_try_lookup(module_obj, ident_expr[:])
-    ]  # TODO
+    return [_attr_identifier_try_lookup(module_obj, ident_expr[:])]  # TODO
 
 
 def _match_import_expr(model: hy.models.Object) -> list[ScopedIdentifier]:
@@ -341,6 +339,24 @@ class TaggedFormTree:
             for i, dot_component in enumerate(dotted_components):
                 dot_context = ".".join(dotted_components[:i])
 
+                # Let's try to figure out which, if any, identifier this specific
+                # section of the dot-chain this dot_component represents.
+                # First, check if we've saved an in-scope identifier with the full
+                # dotted name at all:
+                this_identifier = in_scope_identifiers.get(
+                    ".".join(dotted_components[: i + 1])
+                )
+
+                # If we've found nothing, let's try getting the attr on the identifier
+                # found for the previous component
+                if not this_identifier and i > 0 and new_children[-1].this_identifier:
+                    this_identifier = _attr_identifier_try_lookup(
+                        new_children[-1].this_identifier.py_obj, dot_component
+                    )
+
+                # If this_identifier is still None, then too bad - we didn't find
+                # anything
+
                 child = TaggedFormTree(
                     children=[],
                     start_line=hy_model.start_line,
@@ -355,9 +371,7 @@ class TaggedFormTree:
                         - (0 if i != 0 else 1)
                     ),
                     scoped_identifiers=[],
-                    this_identifier=in_scope_identifiers.get(
-                        ".".join(dotted_components[: i + 1])
-                    ),
+                    this_identifier=this_identifier,
                 )
                 new_children.append(child)
 

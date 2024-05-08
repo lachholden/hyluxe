@@ -70,7 +70,7 @@ def hover(
     return types.Hover(
         contents=types.MarkupContent(
             kind=types.MarkupKind.Markdown,
-            value=str(enclosing_model.this_identifier.documentation) or "HOVER",
+            value=str(enclosing_model.this_identifier) or "HOVER",
         ),
         range=tagged_form_to_range(enclosing_model),
     )
