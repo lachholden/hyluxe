@@ -6,7 +6,7 @@ import io
 import itertools
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Generator, Iterable, Optional
+from typing import Any, Generator, Iterable, Optional, Union
 
 import hy  # for side-effects
 import hy.models
@@ -36,6 +36,38 @@ class ScopedIdentifier:
     py_obj: Optional[Any] = None
 
 
+def plain_or_dotted_name(model: hy.models.Object) -> Optional[str]:
+    """Converts a hy Object to a plain or dotted name string, if valid to do so.
+
+    i.e. 'abc -> "abc"
+         '(. abc def) -> "abc.def"
+         'abc.def -> "abc.def"
+         '(. [abc def]) -> "abc.def"
+
+    Note that the output of the Hy reader represents the last two examples with a
+    similar tree - hence the need for this function.
+    """
+
+    if isinstance(model, hy.models.Symbol):
+        return model[:]
+    elif isinstance(model, hy.models.Expression):
+        if not model[0] == hy.models.Symbol("."):
+            return
+        dotted_string = ""
+
+        if isinstance(model[1], Union[list, hy.models.Sequence]):
+            dotted_segments = model[1]
+        else:
+            dotted_segments = model[1:]
+
+        for dot_segment in dotted_segments:
+            if not isinstance(dot_segment, hy.models.Symbol):
+                return None
+            dotted_string += dot_segment[:] + "."
+
+        return dotted_string.rstrip(".")
+
+
 # CORE MACROS
 def _core_macro_completions() -> list[ScopedIdentifier]:
     return [
@@ -53,6 +85,27 @@ def _core_macro_completions() -> list[ScopedIdentifier]:
 
 # PARSING IMPORTS
 _import_parser = sym("import") + many(module_name_pattern + maybe(importlike))
+
+
+def _identifier_from_plain_import(
+    mod_expr: hy.models.Object,
+) -> ScopedIdentifier:
+    mod_id = plain_or_dotted_name(mod_expr)
+    if not mod_id:
+        raise ValueError(f"Not module id {mod_expr}")
+
+    return ScopedIdentifier(name=mod_id, kind=ScopedIdentifierKind.Module)
+
+
+def _identifier_from_from_import(
+    mod_expr: hy.models.Object, ident_expr: hy.models.Object
+) -> ScopedIdentifier:
+    mod_id = plain_or_dotted_name(mod_expr)
+    ident_id = plain_or_dotted_name(ident_expr)
+    if not mod_id or not ident_id:
+        raise ValueError(f"Not module id {mod_expr} or ident {ident_id}")
+
+    return ScopedIdentifier(name=ident_id, kind=ScopedIdentifierKind.Variable)  # TODO
 
 
 def _match_import_expr(model: hy.models.Object) -> list[ScopedIdentifier]:
@@ -73,30 +126,21 @@ def _match_import_expr(model: hy.models.Object) -> list[ScopedIdentifier]:
     for mod, as_or_froms in entries:
         if as_or_froms is None:
             # "import xyz"
-            new_scoped_identifiers.append(
-                ScopedIdentifier(
-                    name=mod[:],
-                    kind=ScopedIdentifierKind.Module,
-                )
-            )
+            new_scoped_identifiers.append(_identifier_from_plain_import(mod))
         elif as_or_froms[0] == hy.models.Keyword("as"):
             # "import xyz as abc"
             # TODO as
             pass
         else:
             # "from abc import def, ghi as jk"
+            # include the actual base module too, even though it's not technically in
+            # scope
+            new_scoped_identifiers.append(_identifier_from_plain_import(mod))
             for as_or_from in as_or_froms:
                 for ident, ident_as in as_or_from:
-                    if ident_as is None:
-                        new_scoped_identifiers.append(
-                            ScopedIdentifier(
-                                name=ident[:],
-                                kind=ScopedIdentifierKind.Variable,  # TODO
-                            )
-                        )
-                    else:
-                        # TODO as
-                        pass
+                    new_scoped_identifiers.append(
+                        _identifier_from_from_import(mod, ident)
+                    )
         return new_scoped_identifiers
 
 
@@ -210,11 +254,14 @@ class TaggedFormTree:
             for child_model in hy_model:
                 this_level_scoped_identifiers.extend(_match_import_expr(child_model))
 
-        # If this model is a symbol, search for its string value in the identifiers
-        # currently in scope
+        # If this model is a single plain or dotted symbol, search for its string value in the
+        # identifiers currently in scope
         this_identifier = None
-        if isinstance(hy_model, hy.models.Symbol):
-            symbol_name = hy_model[:]
+        if (symbol_name := plain_or_dotted_name(hy_model)) and symbol_name not in [
+            ".",
+            "quote",
+            "quasiquote",
+        ]:
             if scoped_identifier := in_scope_identifiers.get(symbol_name):
                 this_identifier = scoped_identifier
 
