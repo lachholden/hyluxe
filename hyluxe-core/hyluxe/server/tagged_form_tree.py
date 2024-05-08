@@ -265,7 +265,7 @@ class TaggedFormTree:
 
         # If this model is a sequence, check the children for any expressions that
         # introduce identifiers at *this* scope one level higher (e.g. import, setv,
-        # etc.), while also recursively constructing the tree.
+        # etc.)
         if isinstance(hy_model, hy.models.Sequence):
             for child_model in hy_model:
                 this_level_scoped_identifiers.extend(_match_import_expr(child_model))
@@ -275,6 +275,9 @@ class TaggedFormTree:
         this_identifier = None
         if isinstance(hy_model, hy.models.Symbol):
             symbol_name = hy_model[:]
+            # We want to skip for now the macros that can be invoked directly by syntax
+            # (i.e. form1.form2, 'form, `form, ~form, ~@form) as they need special
+            # handling.
             if symbol_name not in [
                 ".",
                 "quote",
