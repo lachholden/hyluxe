@@ -4,6 +4,7 @@ from typing import Optional
 
 import hy  # to set builtin macros
 import hy.reader.exceptions
+from hy.reader.mangling import unmangle
 from hyluxe.server.lsp_conversions import (
     SCOPED_IDENTIFIER_KIND_TO_SEMANTIC_TOKEN_TYPE,
     hover_doc,
@@ -126,7 +127,7 @@ def completions(
             current_form.rstrip(".")
         ):
             show_identifiers += [
-                attr_name_to_identifier_try_getattr(current_obj, n)
+                attr_name_to_identifier_try_getattr(current_obj, unmangle(n))
                 for n in dir(current_obj)
             ]
 
