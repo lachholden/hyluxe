@@ -11,6 +11,29 @@ from hyluxe.server.tagged_form_tree import (
 )
 from lsprotocol import types as lsp
 
+SCOPED_IDENTIFIER_KIND_TO_COMPLETION_ITEM_KIND = {
+    ScopedIdentifierKind.Module: lsp.CompletionItemKind.Module,
+    ScopedIdentifierKind.Variable: lsp.CompletionItemKind.Variable,
+    ScopedIdentifierKind.HyMacro: lsp.CompletionItemKind.Function,
+    ScopedIdentifierKind.HyReader: lsp.CompletionItemKind.Operator,
+    ScopedIdentifierKind.HyMacroCore: lsp.CompletionItemKind.Keyword,
+    ScopedIdentifierKind.Class: lsp.CompletionItemKind.Class,
+    ScopedIdentifierKind.Method: lsp.CompletionItemKind.Method,
+    ScopedIdentifierKind.Function: lsp.CompletionItemKind.Function,
+}
+
+
+SCOPED_IDENTIFIER_KIND_TO_SEMANTIC_TOKEN_TYPE = {
+    ScopedIdentifierKind.Module: lsp.SemanticTokenTypes.Namespace,
+    ScopedIdentifierKind.Variable: lsp.SemanticTokenTypes.Variable,
+    ScopedIdentifierKind.HyMacro: lsp.SemanticTokenTypes.Macro,
+    ScopedIdentifierKind.HyReader: lsp.SemanticTokenTypes.Macro,
+    ScopedIdentifierKind.HyMacroCore: lsp.SemanticTokenTypes.Keyword,
+    ScopedIdentifierKind.Class: lsp.SemanticTokenTypes.Class,
+    ScopedIdentifierKind.Method: lsp.SemanticTokenTypes.Method,
+    ScopedIdentifierKind.Function: lsp.SemanticTokenTypes.Function,
+}
+
 
 def tagged_form_to_range(form: TaggedFormTree) -> lsp.Range:
     return lsp.Range(
@@ -20,7 +43,7 @@ def tagged_form_to_range(form: TaggedFormTree) -> lsp.Range:
 
 
 def unmangle_signature(sig: inspect.Signature) -> str:
-    # TODO destructuring?
+    # TODO destructuring? return values?
     sig_str = ""
     for parameter in sig.parameters.values():
         if parameter.name == "_hy_compiler":
@@ -44,58 +67,16 @@ def unmangle_signature(sig: inspect.Signature) -> str:
     return sig_str
 
 
-def convert_scoped_identifier_kind(
-    kind: ScopedIdentifierKind,
-) -> Optional[lsp.CompletionItemKind]:
-    if kind == ScopedIdentifierKind.Module:
-        return lsp.CompletionItemKind.Module
-    elif kind == ScopedIdentifierKind.Variable:
-        return lsp.CompletionItemKind.Variable
-    elif kind == ScopedIdentifierKind.HyMacro:
-        return lsp.CompletionItemKind.Function
-    elif kind == ScopedIdentifierKind.HyReader:
-        return lsp.CompletionItemKind.Operator
-    elif kind == ScopedIdentifierKind.HyMacroCore:
-        return lsp.CompletionItemKind.Keyword
-    elif kind == ScopedIdentifierKind.Class:
-        return lsp.CompletionItemKind.Class
-    elif kind == ScopedIdentifierKind.Method:
-        return lsp.CompletionItemKind.Method
-    elif kind == ScopedIdentifierKind.Function:
-        return lsp.CompletionItemKind.Function
-
-
 def scoped_identifier_to_completion(ident: ScopedIdentifier) -> lsp.CompletionItem:
     return lsp.CompletionItem(
         label=ident.name,
-        kind=convert_scoped_identifier_kind(ident.kind),
+        kind=SCOPED_IDENTIFIER_KIND_TO_COMPLETION_ITEM_KIND[ident.kind],
         documentation=ident.documentation,
         label_details=lsp.CompletionItemLabelDetails(
             detail=unmangle_signature(ident.signature) if ident.signature else None,
             description=ident.module_path,
         ),
     )
-
-
-def scoped_identifier_kind_to_semantic_token_type(
-    kind: ScopedIdentifierKind,
-) -> Optional[lsp.SemanticTokenTypes]:
-    if kind == ScopedIdentifierKind.Module:
-        return lsp.SemanticTokenTypes.Namespace
-    elif kind == ScopedIdentifierKind.Variable:
-        return lsp.SemanticTokenTypes.Variable
-    elif kind == ScopedIdentifierKind.HyMacro:
-        return lsp.SemanticTokenTypes.Macro
-    elif kind == ScopedIdentifierKind.HyReader:
-        return lsp.SemanticTokenTypes.Macro
-    elif kind == ScopedIdentifierKind.HyMacroCore:
-        return lsp.SemanticTokenTypes.Keyword
-    elif kind == ScopedIdentifierKind.Class:
-        return lsp.SemanticTokenTypes.Class
-    elif kind == ScopedIdentifierKind.Method:
-        return lsp.SemanticTokenTypes.Method
-    elif kind == ScopedIdentifierKind.Function:
-        return lsp.SemanticTokenTypes.Function
 
 
 def hover_doc(ident: ScopedIdentifier) -> lsp.MarkupContent:

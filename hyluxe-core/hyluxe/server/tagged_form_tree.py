@@ -1,3 +1,6 @@
+"""Contains classes and functions to convert a Hy hy.models AST into a TaggedFormTree.
+"""
+
 from __future__ import annotations
 
 import builtins
@@ -20,6 +23,8 @@ from hy.reader.mangling import unmangle
 
 
 class ScopedIdentifierKind(Enum):
+    """The possible  kinds of identifiers that exist in a particular scope."""
+
     Module = "module"
     Variable = "variable"
     Class = "class"
@@ -32,6 +37,8 @@ class ScopedIdentifierKind(Enum):
 
 @dataclass
 class ScopedIdentifier:
+    """An identifier that exists in a particular scope in the TaggedFormTree."""
+
     name: str
     kind: ScopedIdentifierKind
     documentation: Optional[str] = None
@@ -40,8 +47,8 @@ class ScopedIdentifier:
     py_obj: Optional[Any] = None
 
 
-def dotted_name_components(model: hy.models.Object) -> Optional[list[str]]:
-    """Converts a hy Object to its dotted name components, if possible.
+def _dotted_name_components(model: hy.models.Object) -> Optional[list[str]]:
+    """Converts a hy model to its dotted components, if it's a simple dotted expression.
 
     i.e. 'abc -> None
          '(. abc def) -> None
@@ -83,7 +90,8 @@ def dotted_name_components(model: hy.models.Object) -> Optional[list[str]]:
 
 
 # CORE MACROS
-def _core_macro_completions() -> list[ScopedIdentifier]:
+def _core_macro_identifiers() -> list[ScopedIdentifier]:
+    """Get the scoped identifiers corresponding to Hy's core macros."""
     return [
         ScopedIdentifier(
             name=unmangle(func_name),
@@ -101,7 +109,12 @@ def _core_macro_completions() -> list[ScopedIdentifier]:
 _import_parser = sym("import") + many(module_name_pattern + maybe(importlike))
 
 
-def _module_identifier_try_import(module_name: str) -> ScopedIdentifier:
+def _module_name_to_identifier_try_import(module_name: str) -> ScopedIdentifier:
+    """Create a ScopedIdentifier for a module with a given name.
+
+    Will attempt to import the module with the given name to attach the corresponding
+    module object and docs to the ScopedIdentifier.
+    """
     try:
         mod = importlib.import_module(module_name)  # TODO relative imports
         return ScopedIdentifier(
@@ -121,23 +134,37 @@ def _module_identifier_try_import(module_name: str) -> ScopedIdentifier:
 def _identifiers_from_plain_import(
     mod_expr: hy.models.Object,
 ) -> list[ScopedIdentifier]:
+    """Get the identifiers introduced corresponding to the modules for an import ...
+
+    i.e. import abc.def.ghi will create and return identifiers for abc, abc.def, and
+    abc.def.ghi
+    """
 
     if isinstance(mod_expr, hy.models.Symbol):
-        return [_module_identifier_try_import(mod_expr[:])]
+        return [_module_name_to_identifier_try_import(mod_expr[:])]
     else:
-        dotted_module_parts = dotted_name_components(mod_expr)
+        dotted_module_parts = _dotted_name_components(mod_expr)
         if dotted_module_parts is None:
             return []
 
         module_identifiers = []
         for i in range(len(dotted_module_parts)):
             module_name = ".".join(dotted_module_parts[: i + 1])
-            module_identifiers.append(_module_identifier_try_import(module_name))
+            module_identifiers.append(
+                _module_name_to_identifier_try_import(module_name)
+            )
 
         return module_identifiers
 
 
-def _attr_identifier_try_lookup(object: Any, lookup_name: str) -> ScopedIdentifier:
+def _attr_name_to_identifier_try_getattr(
+    object: Any, lookup_name: str
+) -> ScopedIdentifier:
+    """Create a ScopedIdentifier for an attr with a given name.
+
+    Will attempt to call getattr(object, lookup_name) to set the py_obj for the returned
+    identifier.
+    """
     if attr := getattr(object, lookup_name, None):
         kind, signature = ScopedIdentifierKind.Variable, None
         if inspect.ismodule(attr):
@@ -165,14 +192,15 @@ def _attr_identifier_try_lookup(object: Any, lookup_name: str) -> ScopedIdentifi
 def _identifiers_from_from_import(
     mod_expr: hy.models.Object, ident_expr: hy.models.Object
 ) -> list[ScopedIdentifier]:
-    module_obj = _module_identifier_try_import(mod_expr).py_obj
-    return [_attr_identifier_try_lookup(module_obj, ident_expr[:])]  # TODO
+    """Get the scoped identifiers introduced by a from ... import ..."""
+    module_obj = _module_name_to_identifier_try_import(mod_expr).py_obj
+    return [_attr_name_to_identifier_try_getattr(module_obj, ident_expr[:])]  # TODO
 
 
 def _match_import_expr(model: hy.models.Object) -> list[ScopedIdentifier]:
     """Attempts to parse the given model as an import expression.
 
-    Returns a list of ScopedIdentifiers defined if model is an import statement, or the
+    Returns a list of ScopedIdentifiers defined if model is an import statement, or an
     empty list otherwise.
     """
     if not isinstance(model, hy.models.Expression):
@@ -231,7 +259,10 @@ class _NoOpReaderMacroTable:
 
 @dataclass(frozen=True)
 class TaggedFormTree:
-    """Wraps a `hy.models.Object` to attach data useful for the language server."""
+    """Forms an analagous tree structure to `hy.models.Object`.
+
+    Attaches data useful for the language server.
+    """
 
     # tree structure
     children: list[TaggedFormTree]
@@ -251,7 +282,7 @@ class TaggedFormTree:
     ) -> list[TaggedFormTree]:
         """Recursively get the list of TaggedModels enclosing a given position.
 
-        Models in the returned list are ordered from the bottom of the tree up
+        Models in the returned list are ordered from the bottom of the tree up.
         """
         if (
             # multi-line model and we're on a line in the middle
@@ -306,7 +337,7 @@ class TaggedFormTree:
 
         # If this is the root model, then all of the core macros come in scope here.
         if is_root:
-            this_level_scoped_identifiers.extend(_core_macro_completions())
+            this_level_scoped_identifiers.extend(_core_macro_identifiers())
 
         # If this model is a sequence, check the children for any expressions that
         # introduce identifiers at *this* scope one level higher (e.g. import, setv,
@@ -334,7 +365,7 @@ class TaggedFormTree:
 
         # If this model is a plain dotted symbol, then we want to diverge from the Hy
         # model AST a bit and create our sub-forms a bit more carefully
-        if dotted_components := dotted_name_components(hy_model):
+        if dotted_components := _dotted_name_components(hy_model):
             new_children = []
             for i, dot_component in enumerate(dotted_components):
                 dot_context = ".".join(dotted_components[:i])
@@ -350,7 +381,7 @@ class TaggedFormTree:
                 # If we've found nothing, let's try getting the attr on the identifier
                 # found for the previous component
                 if not this_identifier and i > 0 and new_children[-1].this_identifier:
-                    this_identifier = _attr_identifier_try_lookup(
+                    this_identifier = _attr_name_to_identifier_try_getattr(
                         new_children[-1].this_identifier.py_obj, dot_component
                     )
 
@@ -410,6 +441,7 @@ class TaggedFormTree:
         )
 
     def forms_with_identifiers(self) -> Generator[TaggedFormTree, None, None]:
+        """Get all forms that have a corresponding identifier representation set."""
         if self.this_identifier:
             yield self
 
