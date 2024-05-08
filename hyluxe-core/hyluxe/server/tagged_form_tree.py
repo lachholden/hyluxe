@@ -20,14 +20,14 @@ from hy.reader.mangling import unmangle
 
 
 class ScopedIdentifierKind(Enum):
-    Module = auto()
-    Variable = auto()
-    Class = auto()
-    Method = auto()
-    Function = auto()
-    HyMacro = auto()
-    HyReader = auto()
-    HyMacroCore = auto()
+    Module = "module"
+    Variable = "variable"
+    Class = "class"
+    Method = "method"
+    Function = "function"
+    HyMacro = "macro"
+    HyReader = "reader"
+    HyMacroCore = "core macro"
 
 
 @dataclass

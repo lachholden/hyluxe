@@ -96,3 +96,17 @@ def scoped_identifier_kind_to_semantic_token_type(
         return lsp.SemanticTokenTypes.Method
     elif kind == ScopedIdentifierKind.Function:
         return lsp.SemanticTokenTypes.Function
+
+
+def hover_doc(ident: ScopedIdentifier) -> lsp.MarkupContent:
+    signature_line = f"*{ident.kind.value}* `{ident.name}`"
+    if ident.signature:
+        signature_line += ": "
+        signature_line += f"`{unmangle_signature(ident.signature)}`"
+
+    docstring = f"{signature_line}\n\n---\n\n{ident.documentation or ''}"
+
+    return lsp.MarkupContent(
+        kind=lsp.MarkupKind.Markdown,
+        value=docstring,
+    )

@@ -4,6 +4,7 @@ from typing import Optional
 
 import hy  # to set builtin macros
 from hyluxe.server.lsp_conversions import (
+    hover_doc,
     scoped_identifier_kind_to_semantic_token_type,
     scoped_identifier_to_completion,
     tagged_form_to_range,
@@ -68,10 +69,7 @@ def hover(
     else:
         return
     return types.Hover(
-        contents=types.MarkupContent(
-            kind=types.MarkupKind.Markdown,
-            value=str(enclosing_model.this_identifier) or "HOVER",
-        ),
+        contents=hover_doc(enclosing_model.this_identifier),
         range=tagged_form_to_range(enclosing_model),
     )
 
