@@ -67,14 +67,10 @@ def hover(
             break
     else:
         return
-    server.show_message_log(
-        f"line: {params.position.line}  col: {params.position.character}"
-    )
-    server.show_message_log(str(enclosing_model))
     return types.Hover(
         contents=types.MarkupContent(
             kind=types.MarkupKind.Markdown,
-            value=str(enclosing_model.this_identifier) or "HOVER",
+            value=str(enclosing_model.this_identifier.documentation) or "HOVER",
         ),
         range=tagged_form_to_range(enclosing_model),
     )

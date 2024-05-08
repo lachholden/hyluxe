@@ -22,6 +22,9 @@ from hy.reader.mangling import unmangle
 class ScopedIdentifierKind(Enum):
     Module = auto()
     Variable = auto()
+    Class = auto()
+    Method = auto()
+    Function = auto()
     HyMacro = auto()
     HyReader = auto()
     HyMacroCore = auto()
@@ -134,11 +137,37 @@ def _identifiers_from_plain_import(
         return module_identifiers
 
 
+def _attr_identifier_try_lookup(object: Any, lookup_name: str) -> ScopedIdentifier:
+    if attr := getattr(object, lookup_name, None):
+        kind, signature = ScopedIdentifierKind.Variable, None
+        if inspect.ismodule(attr):
+            kind = ScopedIdentifierKind.Module
+        elif inspect.isclass(attr):
+            kind = ScopedIdentifierKind.Class
+        elif inspect.ismethod(attr):
+            kind = ScopedIdentifierKind.Method
+            signature = inspect.signature(attr)
+        elif inspect.isfunction(attr):
+            kind = ScopedIdentifierKind.Function
+            signature = inspect.signature(attr)
+
+        return ScopedIdentifier(
+            name=lookup_name,
+            kind=kind,
+            signature=signature,
+            documentation=getattr(attr, "__doc__", None),
+            py_obj=attr,
+        )
+    else:
+        return ScopedIdentifier(name=lookup_name, kind=ScopedIdentifierKind.Variable)
+
+
 def _identifiers_from_from_import(
     mod_expr: hy.models.Object, ident_expr: hy.models.Object
 ) -> list[ScopedIdentifier]:
+    module_obj = _module_identifier_try_import(mod_expr).py_obj
     return [
-        ScopedIdentifier(name=ident_expr[:], kind=ScopedIdentifierKind.Variable)
+        _attr_identifier_try_lookup(module_obj, ident_expr[:])
     ]  # TODO
 
 

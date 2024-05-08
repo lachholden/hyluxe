@@ -57,6 +57,12 @@ def convert_scoped_identifier_kind(
         return lsp.CompletionItemKind.Operator
     elif kind == ScopedIdentifierKind.HyMacroCore:
         return lsp.CompletionItemKind.Keyword
+    elif kind == ScopedIdentifierKind.Class:
+        return lsp.CompletionItemKind.Class
+    elif kind == ScopedIdentifierKind.Method:
+        return lsp.CompletionItemKind.Method
+    elif kind == ScopedIdentifierKind.Function:
+        return lsp.CompletionItemKind.Function
 
 
 def scoped_identifier_to_completion(ident: ScopedIdentifier) -> lsp.CompletionItem:
@@ -84,3 +90,9 @@ def scoped_identifier_kind_to_semantic_token_type(
         return lsp.SemanticTokenTypes.Macro
     elif kind == ScopedIdentifierKind.HyMacroCore:
         return lsp.SemanticTokenTypes.Keyword
+    elif kind == ScopedIdentifierKind.Class:
+        return lsp.SemanticTokenTypes.Class
+    elif kind == ScopedIdentifierKind.Method:
+        return lsp.SemanticTokenTypes.Method
+    elif kind == ScopedIdentifierKind.Function:
+        return lsp.SemanticTokenTypes.Function
