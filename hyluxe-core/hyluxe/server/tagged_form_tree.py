@@ -157,7 +157,7 @@ def _identifiers_from_plain_import(
         return module_identifiers
 
 
-def _attr_name_to_identifier_try_getattr(
+def attr_name_to_identifier_try_getattr(
     object: Any, lookup_name: str
 ) -> ScopedIdentifier:
     """Create a ScopedIdentifier for an attr with a give (hy-style, unmangled) name.
@@ -200,7 +200,7 @@ def _identifiers_from_from_import(
 ) -> list[ScopedIdentifier]:
     """Get the scoped identifiers introduced by a from ... import ..."""
     module_obj = _module_name_to_identifier_try_import(mod_expr).py_obj
-    return [_attr_name_to_identifier_try_getattr(module_obj, ident_expr[:])]  # TODO
+    return [attr_name_to_identifier_try_getattr(module_obj, ident_expr[:])]  # TODO
 
 
 def _match_import_expr(model: hy.models.Object) -> list[ScopedIdentifier]:
@@ -387,7 +387,7 @@ class TaggedFormTree:
                 # If we've found nothing, let's try getting the attr on the identifier
                 # found for the previous component
                 if not this_identifier and i > 0 and new_children[-1].this_identifier:
-                    this_identifier = _attr_name_to_identifier_try_getattr(
+                    this_identifier = attr_name_to_identifier_try_getattr(
                         new_children[-1].this_identifier.py_obj, dot_component
                     )
 
