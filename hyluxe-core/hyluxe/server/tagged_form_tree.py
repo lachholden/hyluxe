@@ -89,8 +89,50 @@ def _dotted_name_components(model: hy.models.Object) -> Optional[list[str]]:
         return dotted_components
 
 
+def attr_name_to_identifier_try_getattr(
+    object: Any, lookup_name: str
+) -> ScopedIdentifier:
+    """Create a ScopedIdentifier for an attr with a give (hy-style, unmangled) name.
+
+    Will attempt to call getattr(object, mangle(lookup_name)) to set the py_obj for the
+    returned identifier.
+    """
+    if attr := getattr(object, mangle(lookup_name), None):
+        kind, signature = ScopedIdentifierKind.Variable, None
+        if inspect.ismodule(attr):
+            kind = ScopedIdentifierKind.Module
+        elif inspect.isclass(attr):
+            kind = ScopedIdentifierKind.Class
+        elif inspect.ismethod(attr) or inspect.ismethoddescriptor(attr):
+            kind = ScopedIdentifierKind.Method
+            try:
+                signature = inspect.signature(attr)
+            except ValueError:
+                pass
+        elif inspect.isfunction(attr) or inspect.isroutine(attr):
+            kind = ScopedIdentifierKind.Function
+            try:
+                signature = inspect.signature(attr)
+            except ValueError:
+                pass
+
+        return ScopedIdentifier(
+            name=lookup_name,
+            kind=kind,
+            signature=signature,
+            documentation=getattr(attr, "__doc__", None),
+            py_obj=attr,
+        )
+    else:
+        return ScopedIdentifier(name=lookup_name, kind=ScopedIdentifierKind.Variable)
+
+
 # CORE MACROS
 def _core_macro_identifiers() -> list[ScopedIdentifier]:
+    import builtins
+
+    import hy
+
     """Get the scoped identifiers corresponding to Hy's core macros."""
     return [
         ScopedIdentifier(
@@ -102,6 +144,17 @@ def _core_macro_identifiers() -> list[ScopedIdentifier]:
             py_obj=func,
         )
         for func_name, func in builtins._hy_macros.items()
+    ]
+
+
+def _python_builtin_identifiers() -> list[ScopedIdentifier]:
+    """Get the scoped identifiers corresponding to Python's builtins"""
+    import builtins
+
+    return [
+        attr_name_to_identifier_try_getattr(builtins, unmangle(n))
+        for n in dir(builtins)
+        if n not in ["True", "False", "None"]  # gets weird if they're included
     ]
 
 
@@ -155,44 +208,6 @@ def _identifiers_from_plain_import(
             )
 
         return module_identifiers
-
-
-def attr_name_to_identifier_try_getattr(
-    object: Any, lookup_name: str
-) -> ScopedIdentifier:
-    """Create a ScopedIdentifier for an attr with a give (hy-style, unmangled) name.
-
-    Will attempt to call getattr(object, mangle(lookup_name)) to set the py_obj for the
-    returned identifier.
-    """
-    if attr := getattr(object, mangle(lookup_name), None):
-        kind, signature = ScopedIdentifierKind.Variable, None
-        if inspect.ismodule(attr):
-            kind = ScopedIdentifierKind.Module
-        elif inspect.isclass(attr):
-            kind = ScopedIdentifierKind.Class
-        elif inspect.ismethod(attr) or inspect.ismethoddescriptor(attr):
-            kind = ScopedIdentifierKind.Method
-            try:
-                signature = inspect.signature(attr)
-            except ValueError:
-                pass
-        elif inspect.isfunction(attr) or inspect.isroutine(attr):
-            kind = ScopedIdentifierKind.Function
-            try:
-                signature = inspect.signature(attr)
-            except ValueError:
-                pass
-
-        return ScopedIdentifier(
-            name=lookup_name,
-            kind=kind,
-            signature=signature,
-            documentation=getattr(attr, "__doc__", None),
-            py_obj=attr,
-        )
-    else:
-        return ScopedIdentifier(name=lookup_name, kind=ScopedIdentifierKind.Variable)
 
 
 def _identifiers_from_from_import(
@@ -341,9 +356,11 @@ class TaggedFormTree:
     ):
         this_level_scoped_identifiers = []
 
-        # If this is the root model, then all of the core macros come in scope here.
+        # If this is the root model, then all of the core macros and builtins come in
+        # scope here.
         if is_root:
             this_level_scoped_identifiers.extend(_core_macro_identifiers())
+            this_level_scoped_identifiers.extend(_python_builtin_identifiers())
 
         # If this model is a sequence, check the children for any expressions that
         # introduce identifiers at *this* scope one level higher (e.g. import, setv,
