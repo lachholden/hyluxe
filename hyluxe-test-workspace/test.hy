@@ -5,11 +5,24 @@
 (require hyrule.argmove [->])
 (require ptf.util :readers [D])
 
+(import matplotlib.pyplot)
 
 (setv
   MINS "\u2032"
   SECS "\u2033")
 
+  (Decimal beeepj)
+
+(defreader D
+  (.slurp-space &reader)
+  (assert  (.peek-and-getc &reader "\""))
+  (let [decimal-chars-list
+        (takewhile (fn [c] (!= "\"" c)) (.chars &reader))
+
+        decimal-string
+        (.join "" decimal-chars-list)]
+
+    `(Decimal ~decimal-string)))
 
 (defclass [(dataclass :frozen True)] Pace []
   "Represents a pace per some unit distance (i.e. typically time per km.)
@@ -27,7 +40,7 @@
 
   (defn __str__ [self]
     (let [mm (math.floor (/ self.seconds 60))
-          ss (.quantize (- self.seconds (* mm 60)) #D"1")
+          ss (.quantize (- self.seconds (* mm 60)) #D(Decimal))
           ff (- self.seconds ss (* mm 60))]
       f"{mm}{MINS}{ss :02.0f}{(-> ff str (.lstrip "0"))}{SECS}")))
 

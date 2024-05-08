@@ -36,36 +36,46 @@ class ScopedIdentifier:
     py_obj: Optional[Any] = None
 
 
-def plain_or_dotted_name(model: hy.models.Object) -> Optional[str]:
-    """Converts a hy Object to a plain or dotted name string, if valid to do so.
+def dotted_name_components(model: hy.models.Object) -> Optional[list[str]]:
+    """Converts a hy Object to its dotted name components, if possible.
 
-    i.e. 'abc -> "abc"
-         '(. abc def) -> "abc.def"
-         'abc.def -> "abc.def"
-         '(. [abc def]) -> "abc.def"
+    i.e. 'abc -> None
+         '(. abc def) -> None
+         '(. [abc def]) -> None
+         'abc.def -> ["abc", "def"]
 
     Note that the output of the Hy reader represents the last two examples with a
-    similar tree - hence the need for this function.
+    similar tree. We distinguish them by checking whether all parts have the same
+    positions, which is the case for the 'abc.def form.
     """
 
-    if isinstance(model, hy.models.Symbol):
-        return model[:]
-    elif isinstance(model, hy.models.Expression):
+    if isinstance(model, hy.models.Expression):
         if not model[0] == hy.models.Symbol("."):
             return
-        dotted_string = ""
 
         if isinstance(model[1], Union[list, hy.models.Sequence]):
             dotted_segments = model[1]
         else:
             dotted_segments = model[1:]
 
+        dotted_components = []
         for dot_segment in dotted_segments:
             if not isinstance(dot_segment, hy.models.Symbol):
                 return None
-            dotted_string += dot_segment[:] + "."
 
-        return dotted_string.rstrip(".")
+            if (
+                not dot_segment.start_column == model.start_column
+                or not dot_segment.end_column == model.end_column
+            ):
+                return
+
+            # TODO for now, don't handle method calls/relative imports with this parsing
+            if dot_segment == hy.models.Symbol(None):
+                return
+
+            dotted_components.append(dot_segment[:])
+
+        return dotted_components
 
 
 # CORE MACROS
@@ -87,25 +97,31 @@ def _core_macro_completions() -> list[ScopedIdentifier]:
 _import_parser = sym("import") + many(module_name_pattern + maybe(importlike))
 
 
-def _identifier_from_plain_import(
+def _identifiers_from_plain_import(
     mod_expr: hy.models.Object,
-) -> ScopedIdentifier:
-    mod_id = plain_or_dotted_name(mod_expr)
-    if not mod_id:
-        raise ValueError(f"Not module id {mod_expr}")
+) -> list[ScopedIdentifier]:
 
-    return ScopedIdentifier(name=mod_id, kind=ScopedIdentifierKind.Module)
+    if isinstance(mod_expr, hy.models.Symbol):
+        return [ScopedIdentifier(name=mod_expr[:], kind=ScopedIdentifierKind.Module)]
+    else:
+        dotted_module_parts = dotted_name_components(mod_expr)
+        if dotted_module_parts is None:
+            return []
+        return [
+            ScopedIdentifier(
+                name=dmp,
+                kind=ScopedIdentifierKind.Module,
+            )
+            for i, dmp in enumerate(dotted_module_parts)
+        ]
 
 
-def _identifier_from_from_import(
+def _identifiers_from_from_import(
     mod_expr: hy.models.Object, ident_expr: hy.models.Object
-) -> ScopedIdentifier:
-    mod_id = plain_or_dotted_name(mod_expr)
-    ident_id = plain_or_dotted_name(ident_expr)
-    if not mod_id or not ident_id:
-        raise ValueError(f"Not module id {mod_expr} or ident {ident_id}")
-
-    return ScopedIdentifier(name=ident_id, kind=ScopedIdentifierKind.Variable)  # TODO
+) -> list[ScopedIdentifier]:
+    return [
+        ScopedIdentifier(name=ident_expr[:], kind=ScopedIdentifierKind.Variable)
+    ]  # TODO
 
 
 def _match_import_expr(model: hy.models.Object) -> list[ScopedIdentifier]:
@@ -126,7 +142,7 @@ def _match_import_expr(model: hy.models.Object) -> list[ScopedIdentifier]:
     for mod, as_or_froms in entries:
         if as_or_froms is None:
             # "import xyz"
-            new_scoped_identifiers.append(_identifier_from_plain_import(mod))
+            new_scoped_identifiers.extend(_identifiers_from_plain_import(mod))
         elif as_or_froms[0] == hy.models.Keyword("as"):
             # "import xyz as abc"
             # TODO as
@@ -135,11 +151,11 @@ def _match_import_expr(model: hy.models.Object) -> list[ScopedIdentifier]:
             # "from abc import def, ghi as jk"
             # include the actual base module too, even though it's not technically in
             # scope
-            new_scoped_identifiers.append(_identifier_from_plain_import(mod))
+            new_scoped_identifiers.extend(_identifiers_from_plain_import(mod))
             for as_or_from in as_or_froms:
                 for ident, ident_as in as_or_from:
-                    new_scoped_identifiers.append(
-                        _identifier_from_from_import(mod, ident)
+                    new_scoped_identifiers.extend(
+                        _identifiers_from_from_import(mod, ident)
                     )
         return new_scoped_identifiers
 
@@ -254,16 +270,54 @@ class TaggedFormTree:
             for child_model in hy_model:
                 this_level_scoped_identifiers.extend(_match_import_expr(child_model))
 
-        # If this model is a single plain or dotted symbol, search for its string value in the
+        # If this model is a single plain symbol, search for its string value in the
         # identifiers currently in scope
         this_identifier = None
-        if (symbol_name := plain_or_dotted_name(hy_model)) and symbol_name not in [
-            ".",
-            "quote",
-            "quasiquote",
-        ]:
-            if scoped_identifier := in_scope_identifiers.get(symbol_name):
+        if isinstance(hy_model, hy.models.Symbol):
+            symbol_name = hy_model[:]
+            if symbol_name not in [
+                ".",
+                "quote",
+                "quasiquote",
+                "unquote",
+                "unquote-splice",
+            ] and (scoped_identifier := in_scope_identifiers.get(symbol_name)):
                 this_identifier = scoped_identifier
+
+        # If this model is a plain dotted symbol, then we want to diverge from the Hy
+        # model AST a bit and create our sub-forms a bit more carefully
+        if dotted_components := dotted_name_components(hy_model):
+            new_children = []
+            for i, dot_component in enumerate(dotted_components):
+                dot_context = ".".join(dotted_components[:i])
+
+                child = TaggedFormTree(
+                    children=[],
+                    start_line=hy_model.start_line,
+                    end_line=hy_model.start_line,
+                    start_col=(
+                        hy_model.start_column + len(dot_context) + (1 if i != 0 else 0)
+                    ),
+                    end_col=(
+                        hy_model.start_column
+                        + len(dot_context)
+                        + len(dot_component)
+                        - (0 if i != 0 else 1)
+                    ),
+                    scoped_identifiers=[],
+                    this_identifier=in_scope_identifiers.get(dot_component),
+                )
+                new_children.append(child)
+
+            return TaggedFormTree(
+                children=new_children,
+                start_line=hy_model.start_line,
+                start_col=hy_model.start_column,
+                end_line=hy_model.end_line,
+                end_col=hy_model.end_column,
+                scoped_identifiers=[],
+                this_identifier=None,
+            )
 
         # Now iterate through the child models to recursively create tagged forms.
         child_tagged_forms = []
