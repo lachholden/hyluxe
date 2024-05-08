@@ -19,7 +19,7 @@ from funcparserlib.parser import NoParseError, many, maybe
 from hy.core.result_macros import importlike, module_name_pattern
 from hy.model_patterns import pexpr, sym
 from hy.reader.hy_reader import HyReader
-from hy.reader.mangling import unmangle
+from hy.reader.mangling import mangle, unmangle
 
 
 class ScopedIdentifierKind(Enum):
@@ -61,7 +61,7 @@ def _dotted_name_components(model: hy.models.Object) -> Optional[list[str]]:
     """
 
     if isinstance(model, hy.models.Expression):
-        if not model[0] == hy.models.Symbol("."):
+        if not len(model) > 1 or not model[0] == hy.models.Symbol("."):
             return
 
         if isinstance(model[1], Union[list, hy.models.Sequence]):
@@ -160,12 +160,12 @@ def _identifiers_from_plain_import(
 def _attr_name_to_identifier_try_getattr(
     object: Any, lookup_name: str
 ) -> ScopedIdentifier:
-    """Create a ScopedIdentifier for an attr with a given name.
+    """Create a ScopedIdentifier for an attr with a give (hy-style, unmangled) name.
 
-    Will attempt to call getattr(object, lookup_name) to set the py_obj for the returned
-    identifier.
+    Will attempt to call getattr(object, mangle(lookup_name)) to set the py_obj for the
+    returned identifier.
     """
-    if attr := getattr(object, lookup_name, None):
+    if attr := getattr(object, mangle(lookup_name), None):
         kind, signature = ScopedIdentifierKind.Variable, None
         if inspect.ismodule(attr):
             kind = ScopedIdentifierKind.Module
@@ -173,10 +173,16 @@ def _attr_name_to_identifier_try_getattr(
             kind = ScopedIdentifierKind.Class
         elif inspect.ismethod(attr) or inspect.ismethoddescriptor(attr):
             kind = ScopedIdentifierKind.Method
-            signature = inspect.signature(attr)
+            try:
+                signature = inspect.signature(attr)
+            except ValueError:
+                pass
         elif inspect.isfunction(attr) or inspect.isroutine(attr):
             kind = ScopedIdentifierKind.Function
-            signature = inspect.signature(attr)
+            try:
+                signature = inspect.signature(attr)
+            except ValueError:
+                pass
 
         return ScopedIdentifier(
             name=lookup_name,

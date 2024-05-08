@@ -3,6 +3,7 @@ from collections import OrderedDict
 from typing import Optional
 
 import hy  # to set builtin macros
+import hy.reader.exceptions
 from hyluxe.server.lsp_conversions import (
     SCOPED_IDENTIFIER_KIND_TO_SEMANTIC_TOKEN_TYPE,
     hover_doc,
@@ -28,14 +29,21 @@ hy_server = HyLanguageServer("hyluxe-hy", "v0.1")
 def did_open(server: HyLanguageServer, params: types.DidOpenTextDocumentParams):
     doc = server.workspace.get_document(params.text_document.uri)
     tagged_model = TaggedFormTree.parse_hy(doc.source)
-    server.tagged_trees[doc.uri] = tagged_model
+    try:
+        tagged_model = TaggedFormTree.parse_hy(doc.source)
+        server.tagged_trees[doc.uri] = tagged_model
+    except hy.reader.exceptions.LexException:
+        del server.tagged_trees[doc.uri]
 
 
 @hy_server.feature(types.TEXT_DOCUMENT_DID_CHANGE)
-def did_open(server: HyLanguageServer, params: types.DidOpenTextDocumentParams):
+def did_change(server: HyLanguageServer, params: types.DidChangeTextDocumentParams):
     doc = server.workspace.get_document(params.text_document.uri)
-    tagged_model = TaggedFormTree.parse_hy(doc.source)
-    server.tagged_trees[doc.uri] = tagged_model
+    try:
+        tagged_model = TaggedFormTree.parse_hy(doc.source)
+        server.tagged_trees[doc.uri] = tagged_model
+    except hy.reader.exceptions.LexException:
+        del server.tagged_trees[doc.uri]
 
 
 @hy_server.feature(
@@ -48,7 +56,10 @@ def completions(
 ) -> types.CompletionList:
     """Returns completion items."""
     doc = server.workspace.get_document(params.text_document.uri)
-    tagged_model = server.tagged_trees[doc.uri]
+    try:
+        tagged_model = server.tagged_trees[doc.uri]
+    except KeyError:
+        return
     enclosing_models = tagged_model.get_models_enclosing_position(
         params.position.line + 1, params.position.character + 1
     )
@@ -68,7 +79,10 @@ def hover(
     server: HyLanguageServer, params: Optional[types.HoverParams] = None
 ) -> Optional[types.Hover]:
     doc = server.workspace.get_document(params.text_document.uri)
-    tagged_model = server.tagged_trees[doc.uri]
+    try:
+        tagged_model = server.tagged_trees[doc.uri]
+    except KeyError:
+        return
     enclosing_models = tagged_model.get_models_enclosing_position(
         params.position.line + 1, params.position.character + 1
     )
@@ -99,7 +113,10 @@ def semantic_tokens(
 ) -> types.SemanticTokens:
 
     doc = server.workspace.get_document(params.text_document.uri)
-    tagged_model = server.tagged_trees[doc.uri]
+    try:
+        tagged_model = server.tagged_trees[doc.uri]
+    except KeyError:
+        return
 
     token_data = []
     last_line = 0
