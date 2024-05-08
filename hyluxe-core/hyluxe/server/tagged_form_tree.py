@@ -109,7 +109,7 @@ def _identifiers_from_plain_import(
             return []
         return [
             ScopedIdentifier(
-                name=dmp,
+                name=".".join(dotted_module_parts[: i + 1]),
                 kind=ScopedIdentifierKind.Module,
             )
             for i, dmp in enumerate(dotted_module_parts)
@@ -305,7 +305,9 @@ class TaggedFormTree:
                         - (0 if i != 0 else 1)
                     ),
                     scoped_identifiers=[],
-                    this_identifier=in_scope_identifiers.get(dot_component),
+                    this_identifier=in_scope_identifiers.get(
+                        ".".join(dotted_components[: i + 1])
+                    ),
                 )
                 new_children.append(child)
 
