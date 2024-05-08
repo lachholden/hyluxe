@@ -131,6 +131,8 @@ def completions(
                 for n in dir(current_obj)
             ]
 
+    # TODO import and require only suggest modules
+
     return types.CompletionList(
         is_incomplete=False,
         items=[scoped_identifier_to_completion(ident) for ident in show_identifiers],
