@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import builtins
+import importlib
 import inspect
 import io
 import itertools
@@ -97,23 +98,40 @@ def _core_macro_completions() -> list[ScopedIdentifier]:
 _import_parser = sym("import") + many(module_name_pattern + maybe(importlike))
 
 
+def _module_identifier_try_import(module_name: str) -> ScopedIdentifier:
+    try:
+        mod = importlib.import_module(module_name)  # TODO relative imports
+        return ScopedIdentifier(
+            name=module_name,
+            kind=ScopedIdentifierKind.Module,
+            documentation=mod.__doc__,
+            module_path=module_name,
+            py_obj=mod,
+        )
+    except ModuleNotFoundError:
+        return ScopedIdentifier(
+            name=module_name,
+            kind=ScopedIdentifierKind.Module,
+        )
+
+
 def _identifiers_from_plain_import(
     mod_expr: hy.models.Object,
 ) -> list[ScopedIdentifier]:
 
     if isinstance(mod_expr, hy.models.Symbol):
-        return [ScopedIdentifier(name=mod_expr[:], kind=ScopedIdentifierKind.Module)]
+        return [_module_identifier_try_import(mod_expr[:])]
     else:
         dotted_module_parts = dotted_name_components(mod_expr)
         if dotted_module_parts is None:
             return []
-        return [
-            ScopedIdentifier(
-                name=".".join(dotted_module_parts[: i + 1]),
-                kind=ScopedIdentifierKind.Module,
-            )
-            for i, dmp in enumerate(dotted_module_parts)
-        ]
+
+        module_identifiers = []
+        for i in range(len(dotted_module_parts)):
+            module_name = ".".join(dotted_module_parts[: i + 1])
+            module_identifiers.append(_module_identifier_try_import(module_name))
+
+        return module_identifiers
 
 
 def _identifiers_from_from_import(
