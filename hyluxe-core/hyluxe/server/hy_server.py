@@ -15,7 +15,10 @@ from pygls.server import LanguageServer
 
 
 class HyLanguageServer(LanguageServer):
-    pass
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        self.tagged_trees = {}
 
 
 hy_server = HyLanguageServer("hyluxe-hy", "v0.1")
@@ -25,7 +28,14 @@ hy_server = HyLanguageServer("hyluxe-hy", "v0.1")
 def did_open(server: HyLanguageServer, params: types.DidOpenTextDocumentParams):
     doc = server.workspace.get_document(params.text_document.uri)
     tagged_model = TaggedFormTree.parse_hy(doc.source)
-    server.show_message_log(str(tagged_model))
+    server.tagged_trees[doc.uri] = tagged_model
+
+
+@hy_server.feature(types.TEXT_DOCUMENT_DID_CHANGE)
+def did_open(server: HyLanguageServer, params: types.DidOpenTextDocumentParams):
+    doc = server.workspace.get_document(params.text_document.uri)
+    tagged_model = TaggedFormTree.parse_hy(doc.source)
+    server.tagged_trees[doc.uri] = tagged_model
 
 
 @hy_server.feature(
@@ -38,7 +48,7 @@ def completions(
 ) -> types.CompletionList:
     """Returns completion items."""
     doc = server.workspace.get_document(params.text_document.uri)
-    tagged_model = TaggedFormTree.parse_hy(doc.source)
+    tagged_model = server.tagged_trees[doc.uri]
     enclosing_models = tagged_model.get_models_enclosing_position(
         params.position.line + 1, params.position.character + 1
     )
@@ -58,7 +68,7 @@ def hover(
     server: HyLanguageServer, params: Optional[types.HoverParams] = None
 ) -> Optional[types.Hover]:
     doc = server.workspace.get_document(params.text_document.uri)
-    tagged_model = TaggedFormTree.parse_hy(doc.source)
+    tagged_model = server.tagged_trees[doc.uri]
     enclosing_models = tagged_model.get_models_enclosing_position(
         params.position.line + 1, params.position.character + 1
     )
@@ -89,7 +99,7 @@ def semantic_tokens(
 ) -> types.SemanticTokens:
 
     doc = server.workspace.get_document(params.text_document.uri)
-    tagged_model = TaggedFormTree.parse_hy(doc.source)
+    tagged_model = server.tagged_trees[doc.uri]
 
     token_data = []
     last_line = 0
@@ -101,7 +111,6 @@ def semantic_tokens(
         ]
         if semantic_kind is None or form.start_line != form.end_line:
             continue
-        server.show_message_log(repr(form))
         if form.start_line - 1 != last_line:
             last_start = 0
         line_delta = form.start_line - 1 - last_line
