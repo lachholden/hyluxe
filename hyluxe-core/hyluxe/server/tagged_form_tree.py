@@ -100,6 +100,30 @@ def _match_import_expr(model: hy.models.Object) -> list[ScopedIdentifier]:
         return new_scoped_identifiers
 
 
+class _NoOpReaderMacroTable:
+    """When we parse a Hy source file to get the model tree, we don't want to have to
+    run reader macros.
+
+    This class can replace `HyReader.reader_macros`, and acts as though every called
+    reader macro exists and does nothing.
+
+    This has some tradeoffs:
+      - pro: we don't have to find or evaluate reader macros as we parse (good for speed
+        and reliability - don't want a buggy reader macro to crash the whole language
+        server)
+      - con: it restricts reader macros that we can feasibly use to those that maintain
+        relatively standard form syntax (this is probably a fine restriction)
+    """
+
+    # hy_reader.py:390
+    def __contains__(self, _):
+        return True
+
+    # hy_reader.py:391
+    def __getitem__(self, _):
+        return lambda _, __: None
+
+
 @dataclass(frozen=True)
 class TaggedFormTree:
     """Wraps a `hy.models.Object` to attach data useful for the language server."""
@@ -153,6 +177,7 @@ class TaggedFormTree:
     @classmethod
     def parse_hy(cls, source: str):
         reader = HyReader(use_current_readers=False)
+        reader.reader_macros = _NoOpReaderMacroTable()  # type: ignore
         line_count = len(source.splitlines())
         col_count = len(source.splitlines()[-1])
         forms = reader.parse(io.StringIO(source))
