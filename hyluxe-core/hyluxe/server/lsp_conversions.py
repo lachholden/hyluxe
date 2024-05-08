@@ -69,3 +69,18 @@ def scoped_identifier_to_completion(ident: ScopedIdentifier) -> lsp.CompletionIt
             description=ident.module_path,
         ),
     )
+
+
+def scoped_identifier_kind_to_semantic_token_type(
+    kind: ScopedIdentifierKind,
+) -> Optional[lsp.SemanticTokenTypes]:
+    if kind == ScopedIdentifierKind.Module:
+        return lsp.SemanticTokenTypes.Namespace
+    elif kind == ScopedIdentifierKind.Variable:
+        return lsp.SemanticTokenTypes.Variable
+    elif kind == ScopedIdentifierKind.HyMacro:
+        return lsp.SemanticTokenTypes.Macro
+    elif kind == ScopedIdentifierKind.HyReader:
+        return lsp.SemanticTokenTypes.Macro
+    elif kind == ScopedIdentifierKind.HyMacroCore:
+        return lsp.SemanticTokenTypes.Keyword
