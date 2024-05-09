@@ -1,0 +1,100 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Hy",
+	"patterns": [
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#linecomments"
+		},
+		{
+			"include": "#boollikes"
+		},
+		{
+			"include": "#quotes"
+		},
+		{
+			"include": "#functions"
+		},
+		{
+			"include": "#readers"
+		},
+		{
+			"include": "#numbers"
+		}
+	],
+	"repository": {
+		"linecomments": {
+			"patterns": [
+				{
+					"name": "comment.line.semicolon.hy",
+					"match": ";(.*)$"
+				}
+			]
+		},
+		"keywords": {
+			"patterns": [
+				{
+					"name": "entity.name.tag.keyword.hy",
+					"match": "\\:[^\\(\\)\\[\\]{};\"'`~\\s]+"
+				}
+			]
+		},
+		"functions": {
+			"patterns": [
+				{
+					"name": "entity.name.function.clojure",
+					"match": "(?<=\\()\\s*[^\\(\\)\\[\\]{};\"'`~\\s]+"
+				}
+			]
+		},
+		"quotes": {
+			"patterns": [
+				{
+					"name": "keyword.operator.quoting.hy",
+					"match": "`|~|'|~@"
+				}
+			]
+		},
+		"boollikes": {
+			"patterns": [
+				{
+					"name": "constant.language.hy",
+					"match": "True|False|None"
+				}
+			]
+		},
+		"readers": {
+			"patterns": [
+				{
+					"name": "constant.character.escape.reader.hy",
+					"match": "#([^\\(\\)\\[\\]{};\"'`~\\s]+|.)"
+				}
+			]
+		},
+		"strings": {
+			"name": "string.quoted.double.hy",
+			"begin": "(f?\"|}(?=[^\n]*?[{\"]))",
+			"end": "(\"|(?<=[\"}][^\n]*?){)",
+			"patterns": [
+				{
+					"name": "constant.character.escape.hy",
+					"match": "\\\\."
+				}
+			]
+		},
+		"numbers": {
+			"patterns": [
+				{
+					"name": "constant.numeric.hy",
+					"match": "(?<=[\\{\\[\\(\\s])([0-9]+(\\.[0-9]+)?|(#x)[0-9a-fA-F]+|(#o)[0-7]+|(#b)[01]+)(?=[\\s;()'\",\\[\\]\\{\\}])"
+				}
+			]
+		}
+	},
+	"scopeName": "source.hy"
+}

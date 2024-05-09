@@ -1,0 +1,25 @@
+{
+  "name": "hyluxe",
+  "displayName": "Hyluxe",
+  "description": "Language support for Hy",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.89.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "hy",
+      "aliases": ["Hy", "hy"],
+      "extensions": [".hy"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "hy",
+      "scopeName": "source.hy",
+      "path": "./syntaxes/hy.tmLanguage.json"
+    }]
+  }
+}

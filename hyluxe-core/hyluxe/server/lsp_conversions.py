@@ -64,7 +64,7 @@ def unmangle_signature(sig: inspect.Signature) -> str:
         else:
             sig_str += f" {annotated_name}"
 
-    return sig_str
+    return sig_str.lstrip(" ")
 
 
 def scoped_identifier_to_completion(ident: ScopedIdentifier) -> lsp.CompletionItem:
@@ -80,10 +80,11 @@ def scoped_identifier_to_completion(ident: ScopedIdentifier) -> lsp.CompletionIt
 
 
 def hover_doc(ident: ScopedIdentifier) -> lsp.MarkupContent:
-    signature_line = f"*{ident.kind.value}* `{ident.name}`"
+    signature_line = f"*{ident.kind.value}* `{(ident.module_path + '.') if ident.module_path else ''}{ident.name}`"
     if ident.signature:
-        signature_line += ": "
-        signature_line += f"`{unmangle_signature(ident.signature)}`"
+        signature_line += "\n\n```hy\n"
+        signature_line += f"({ident.name} {unmangle_signature(ident.signature)})"
+        signature_line += "\n```"
 
     docstring = f"{signature_line}\n\n---\n\n{ident.documentation or ''}"
 
