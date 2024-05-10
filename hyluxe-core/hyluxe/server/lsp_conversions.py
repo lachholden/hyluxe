@@ -80,15 +80,18 @@ def scoped_identifier_to_completion(ident: ScopedIdentifier) -> lsp.CompletionIt
 
 
 def hover_doc(ident: ScopedIdentifier) -> lsp.MarkupContent:
-    signature_line = f"*{ident.kind.value}* `{(ident.module_path + '.') if ident.module_path else ''}{ident.name}`"
+    hover = ""
     if ident.signature:
-        signature_line += "\n\n```hy\n"
-        signature_line += f"({ident.name} {unmangle_signature(ident.signature)})"
-        signature_line += "\n```"
+        hover += "```hy\n"
+        hover += (
+            f":{ident.kind.value} ({ident.name} {unmangle_signature(ident.signature)})"
+        )
+        hover += "\n```\n\n---\n\n"
 
-    docstring = f"{signature_line}\n\n---\n\n{ident.documentation or ''}"
+    if ident.documentation:
+        hover += ident.documentation
 
     return lsp.MarkupContent(
         kind=lsp.MarkupKind.Markdown,
-        value=docstring,
+        value=hover,
     )

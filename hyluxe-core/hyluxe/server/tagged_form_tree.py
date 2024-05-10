@@ -33,7 +33,7 @@ class ScopedIdentifierKind(Enum):
     Function = "function"
     HyMacro = "macro"
     HyReader = "reader"
-    HyMacroCore = "core macro"
+    HyMacroCore = "core-macro"
 
 
 @dataclass
