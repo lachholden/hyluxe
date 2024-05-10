@@ -106,16 +106,12 @@ def attr_name_to_identifier_try_getattr(
             kind = ScopedIdentifierKind.Class
         elif inspect.ismethod(attr) or inspect.ismethoddescriptor(attr):
             kind = ScopedIdentifierKind.Method
-            try:
-                signature = inspect.signature(attr)
-            except ValueError:
-                pass
         elif inspect.isfunction(attr) or inspect.isroutine(attr):
             kind = ScopedIdentifierKind.Function
-            try:
-                signature = inspect.signature(attr)
-            except ValueError:
-                pass
+        try:
+            signature = inspect.signature(attr)
+        except (ValueError, TypeError):
+            pass
 
         return ScopedIdentifier(
             name=lookup_name,
