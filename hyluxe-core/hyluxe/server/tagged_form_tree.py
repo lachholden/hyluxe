@@ -8,6 +8,7 @@ import importlib
 import inspect
 import io
 import itertools
+import pydoc
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Generator, Iterable, Optional, Union
@@ -120,7 +121,7 @@ def attr_name_to_identifier_try_getattr(
             name=lookup_name,
             kind=kind,
             signature=signature,
-            documentation=getattr(attr, "__doc__", None),
+            documentation=pydoc.getdoc(attr),
             py_obj=attr,
         )
     else:
@@ -138,7 +139,7 @@ def _core_macro_identifiers() -> list[ScopedIdentifier]:
         ScopedIdentifier(
             name=unmangle(func_name),
             kind=ScopedIdentifierKind.HyMacroCore,
-            documentation=inspect.getdoc(func),
+            documentation=pydoc.getdoc(func),
             signature=inspect.signature(func),
             module_path=inspect.getmodule(func).__name__,
             py_obj=func,
@@ -173,7 +174,7 @@ def _module_name_to_identifier_try_import(module_name: str) -> ScopedIdentifier:
         return ScopedIdentifier(
             name=module_name,
             kind=ScopedIdentifierKind.Module,
-            documentation=mod.__doc__,
+            documentation=pydoc.getdoc(mod),
             module_path=module_name,
             py_obj=mod,
         )
@@ -278,7 +279,7 @@ class _NoOpReaderMacroTable:
         if reader := HyReader.DEFAULT_TABLE.get(key):
             return reader
         else:
-            return lambda __, _ : None
+            return lambda __, _: None
 
 
 @dataclass(frozen=True)
