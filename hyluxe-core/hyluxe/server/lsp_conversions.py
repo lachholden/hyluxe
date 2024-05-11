@@ -73,8 +73,10 @@ def scoped_identifier_to_completion(ident: ScopedIdentifier) -> lsp.CompletionIt
         kind=SCOPED_IDENTIFIER_KIND_TO_COMPLETION_ITEM_KIND[ident.kind],
         documentation=ident.documentation,
         label_details=lsp.CompletionItemLabelDetails(
-            detail=unmangle_signature(ident.signature) if ident.signature else None,
-            description=ident.module_path,
+            detail=(
+                " " + unmangle_signature(ident.signature) if ident.signature else None
+            ),
+            description=ident.parent_name or f":{ident.kind.value}",
         ),
     )
 
@@ -83,9 +85,9 @@ def hover_doc(ident: ScopedIdentifier) -> lsp.MarkupContent:
     hover = ""
     if ident.signature:
         hover += "```hy\n"
-        hover += (
-            f":{ident.kind.value} ({ident.name} {unmangle_signature(ident.signature)})"
-        )
+        hover += f":{ident.kind.value} ("
+        hover += f"{ident.parent_name}." if ident.parent_name else ""
+        hover += f"{ident.name} {unmangle_signature(ident.signature)})"
         hover += "\n```\n\n---\n\n"
 
     if ident.documentation:

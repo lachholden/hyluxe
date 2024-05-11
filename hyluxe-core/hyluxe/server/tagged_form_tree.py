@@ -44,7 +44,7 @@ class ScopedIdentifier:
     kind: ScopedIdentifierKind
     documentation: Optional[str] = None
     signature: Optional[inspect.Signature] = None
-    module_path: Optional[str] = None
+    parent_name: Optional[str] = None
     py_obj: Optional[Any] = None
 
 
@@ -119,9 +119,14 @@ def attr_name_to_identifier_try_getattr(
             signature=signature,
             documentation=pydoc.getdoc(attr),
             py_obj=attr,
+            parent_name=getattr(object, "__name__", None),
         )
     else:
-        return ScopedIdentifier(name=lookup_name, kind=ScopedIdentifierKind.Variable)
+        return ScopedIdentifier(
+            name=lookup_name,
+            kind=ScopedIdentifierKind.Variable,
+            parent_name=getattr(object, "__name__", None),
+        )
 
 
 # CORE MACROS
@@ -137,7 +142,7 @@ def _core_macro_identifiers() -> list[ScopedIdentifier]:
             kind=ScopedIdentifierKind.HyMacroCore,
             documentation=pydoc.getdoc(func),
             signature=inspect.signature(func),
-            module_path=inspect.getmodule(func).__name__,
+            parent_name=inspect.getmodule(func).__name__,
             py_obj=func,
         )
         for func_name, func in builtins._hy_macros.items()
@@ -171,7 +176,6 @@ def _module_name_to_identifier_try_import(module_name: str) -> ScopedIdentifier:
             name=module_name,
             kind=ScopedIdentifierKind.Module,
             documentation=pydoc.getdoc(mod),
-            module_path=module_name,
             py_obj=mod,
         )
     except ModuleNotFoundError:
