@@ -42,7 +42,7 @@ def tagged_form_to_range(form: TaggedFormTree) -> lsp.Range:
     )
 
 
-def unmangle_signature(sig: inspect.Signature) -> str:
+def unmangle_signature_parameters(sig: inspect.Signature) -> str:
     # TODO destructuring? return values?
     sig_str = ""
     for parameter in sig.parameters.values():
@@ -55,7 +55,7 @@ def unmangle_signature(sig: inspect.Signature) -> str:
             sig_str += " #*"
 
         if parameter.annotation != inspect.Parameter.empty:
-            annotated_name = f"#^ {unmangle(parameter.name)} {unmangle(parameter.annotation.__name__)}"
+            annotated_name = f"#^ {unmangle(parameter.name)} {unmangle(getattr(parameter.annotation, '__name__', str(parameter.annotation)))}"
         else:
             annotated_name = unmangle(parameter.name)
 
@@ -67,15 +67,30 @@ def unmangle_signature(sig: inspect.Signature) -> str:
     return sig_str.lstrip(" ")
 
 
+def unmangle_return_type(sig: inspect.Signature) -> Optional[str]:
+    if sig.return_annotation != inspect.Signature.empty:
+        return f"#^ {unmangle(getattr(sig.return_annotation, '__name__', str(sig.return_annotation)))}"
+
+
+def full_signature_string(ident: ScopedIdentifier, include_kind=True) -> str:
+    assert ident.signature
+    sig_str = ""
+    if include_kind:
+        sig_str += f":{ident.kind.value} "
+    if ret := unmangle_return_type(ident.signature):
+        sig_str += ret + " "
+    sig_str += f"({ident.parent_name}." if ident.parent_name else "("
+    sig_str += f"{ident.name} {unmangle_signature_parameters(ident.signature)})"
+    return sig_str
+
+
 def scoped_identifier_to_completion(ident: ScopedIdentifier) -> lsp.CompletionItem:
     return lsp.CompletionItem(
         label=ident.name,
         kind=SCOPED_IDENTIFIER_KIND_TO_COMPLETION_ITEM_KIND[ident.kind],
         documentation=ident.documentation,
         label_details=lsp.CompletionItemLabelDetails(
-            detail=(
-                " " + unmangle_signature(ident.signature) if ident.signature else None
-            ),
+            detail=(" " + full_signature_string(ident) if ident.signature else None),
             description=ident.parent_name or f":{ident.kind.value}",
         ),
     )
@@ -85,9 +100,7 @@ def hover_doc(ident: ScopedIdentifier) -> lsp.MarkupContent:
     hover = ""
     if ident.signature:
         hover += "```hy\n"
-        hover += f":{ident.kind.value} ("
-        hover += f"{ident.parent_name}." if ident.parent_name else ""
-        hover += f"{ident.name} {unmangle_signature(ident.signature)})"
+        hover += full_signature_string(ident)
         hover += "\n```\n\n---\n\n"
 
     if ident.documentation:
