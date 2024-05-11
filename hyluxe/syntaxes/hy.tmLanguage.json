@@ -39,7 +39,7 @@
 		"keywords": {
 			"patterns": [
 				{
-					"name": "entity.name.tag.keyword.hy",
+					"name": "variable.other.constant.keyword.hy",
 					"match": "\\:[^\\(\\)\\[\\]{};\"'`~\\s]+"
 				}
 			]
@@ -55,7 +55,7 @@
 		"quotes": {
 			"patterns": [
 				{
-					"name": "keyword.operator.quoting.hy",
+					"name": "entity.name.tag.quoting.hy",
 					"match": "`|~|'|~@"
 				}
 			]
@@ -71,7 +71,7 @@
 		"readers": {
 			"patterns": [
 				{
-					"name": "constant.character.escape.reader.hy",
+					"name": "entity.name.type.reader.hy",
 					"match": "#([^\\(\\)\\[\\]{};\"'`~\\s]+|.)"
 				}
 			]
