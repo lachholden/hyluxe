@@ -10,16 +10,32 @@
     "Programming Languages"
   ],
   "contributes": {
-    "languages": [{
-      "id": "hy",
-      "aliases": ["Hy", "hy"],
-      "extensions": [".hy"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "hy",
-      "scopeName": "source.hy",
-      "path": "./syntaxes/hy.tmLanguage.json"
-    }]
+    "languages": [
+      {
+        "id": "hy",
+        "aliases": [
+          "Hy",
+          "hy"
+        ],
+        "extensions": [
+          ".hy"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "hy",
+        "scopeName": "source.hy",
+        "path": "./syntaxes/hy.tmLanguage.json"
+      }
+    ],
+    "themes": [
+      {
+        "label": "Hyluxe",
+        "uiTheme": "vs-dark",
+        "path": "./themes/hyluxe.json"
+      }
+    ]
   }
 }
