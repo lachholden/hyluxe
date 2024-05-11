@@ -40,7 +40,7 @@ class ScopedIdentifierKind(Enum):
 class ScopedIdentifier:
     """An identifier that exists in a particular scope in the TaggedFormTree."""
 
-    name: str
+    name: str  # should by hy-style, unmangled
     kind: ScopedIdentifierKind
     documentation: Optional[str] = None
     signature: Optional[inspect.Signature] = None
@@ -119,13 +119,13 @@ def attr_name_to_identifier_try_getattr(
             signature=signature,
             documentation=pydoc.getdoc(attr),
             py_obj=attr,
-            parent_name=getattr(object, "__name__", None),
+            parent_name=unmangle(getattr(object, "__name__", None)),
         )
     else:
         return ScopedIdentifier(
             name=lookup_name,
             kind=ScopedIdentifierKind.Variable,
-            parent_name=getattr(object, "__name__", None),
+            parent_name=unmangle(getattr(object, "__name__", None)),
         )
 
 
@@ -142,7 +142,7 @@ def _core_macro_identifiers() -> list[ScopedIdentifier]:
             kind=ScopedIdentifierKind.HyMacroCore,
             documentation=pydoc.getdoc(func),
             signature=inspect.signature(func),
-            parent_name=inspect.getmodule(func).__name__,
+            parent_name=unmangle(inspect.getmodule(func).__name__),
             py_obj=func,
         )
         for func_name, func in builtins._hy_macros.items()
@@ -171,16 +171,16 @@ def _module_name_to_identifier_try_import(module_name: str) -> ScopedIdentifier:
     module object and docs to the ScopedIdentifier.
     """
     try:
-        mod = importlib.import_module(module_name)  # TODO relative imports
+        mod = importlib.import_module(mangle(module_name))  # TODO relative imports
         return ScopedIdentifier(
-            name=module_name,
+            name=unmangle(module_name),
             kind=ScopedIdentifierKind.Module,
             documentation=pydoc.getdoc(mod),
             py_obj=mod,
         )
     except ModuleNotFoundError:
         return ScopedIdentifier(
-            name=module_name,
+            name=unmangle(module_name),
             kind=ScopedIdentifierKind.Module,
         )
 

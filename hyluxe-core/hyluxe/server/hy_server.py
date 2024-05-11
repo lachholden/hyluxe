@@ -167,6 +167,8 @@ def hover(
 
 _semantic_tokens_legend = list(types.SemanticTokenTypes._value2member_map_.keys())
 
+# ^ return (function args #* argss)
+
 
 @hy_server.feature(
     types.TEXT_DOCUMENT_SEMANTIC_TOKENS_FULL,
